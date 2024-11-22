@@ -83,30 +83,24 @@ contains(DEFINES, PLUGIN_MCUMGR_TRANSPORT_UART) {
 
 contains(DEFINES, PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH) {
     SOURCES += \
-	AuTerm/plugins/mcumgr/bluetooth_setup.cpp \
 	AuTerm/plugins/mcumgr/smp_bluetooth.cpp
 
     HEADERS += \
-	AuTerm/plugins/mcumgr/bluetooth_setup.h \
 	AuTerm/plugins/mcumgr/smp_bluetooth.h
 }
 
 contains(DEFINES, PLUGIN_MCUMGR_TRANSPORT_UDP) {
     SOURCES += \
-	AuTerm/plugins/mcumgr/udp_setup.cpp \
 	AuTerm/plugins/mcumgr/smp_udp.cpp
 
     HEADERS += \
-	AuTerm/plugins/mcumgr/udp_setup.h \
 	AuTerm/plugins/mcumgr/smp_udp.h
 }
 
 contains(DEFINES, PLUGIN_MCUMGR_TRANSPORT_LORAWAN) {
     SOURCES += \
-	AuTerm/plugins/mcumgr/lorawan_setup.cpp \
 	AuTerm/plugins/mcumgr/smp_lorawan.cpp
 
     HEADERS += \
-	AuTerm/plugins/mcumgr/lorawan_setup.h \
 	AuTerm/plugins/mcumgr/smp_lorawan.h
 }

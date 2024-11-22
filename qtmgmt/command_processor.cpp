@@ -360,6 +360,16 @@ void command_processor::run()
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
     else if (user_transport == value_transport_udp)
     {
+        transport_udp = new smp_udp(this);
+        active_transport = transport_udp;
+
+        exit_code = configure_transport_options_udp(transport_udp, &parser);
+
+        if (exit_code != EXIT_CODE_SUCCESS)
+        {
+            QCoreApplication::exit(exit_code);
+            return;
+        }
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
@@ -377,6 +387,8 @@ void command_processor::run()
         QCoreApplication::exit(EXIT_CODE_TRANSPORT_OPEN_FAILED);
         return;
     }
+
+    //Wait for connection to establish
 
     //Issue specified command
     processor = new smp_processor(this);
@@ -588,8 +600,35 @@ void command_processor::add_transport_options_bluetooth(QList<entry_t> *entries)
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
 void command_processor::add_transport_options_udp(QList<entry_t> *entries)
 {
-    parser->addOption(option_transport_udp_host);
-    parser->addOption(option_transport_udp_port);
+    entries->append({&option_transport_udp_host, true, false, nullptr});
+    entries->append({&option_transport_udp_port, false, false, nullptr});
+}
+
+int command_processor::configure_transport_options_udp(smp_udp *transport, QCommandLineParser *parser)
+{
+    struct smp_udp_config_t udp_configuration;
+
+    udp_configuration.hostname = parser->value(option_transport_udp_host);
+
+    if (parser->isSet(option_transport_udp_port) == true)
+    {
+        bool converted = false;
+
+        udp_configuration.port = parser->value(option_transport_udp_port).toUInt(&converted);
+
+        if (converted == false)
+        {
+            return EXIT_CODE_NUMERIAL_ARGUMENT_CONVERSION_FAILED;
+        }
+    }
+    else
+    {
+        udp_configuration.port = 1337;
+    }
+
+    transport->set_connection_config(&udp_configuration);
+
+    return EXIT_CODE_SUCCESS;
 }
 #endif
 
@@ -832,6 +871,7 @@ void command_processor::set_group_transport_settings(smp_group *group, uint32_t 
 
 void command_processor::status(uint8_t user_data, group_status status, QString error_string)
 {
+#if 0
     if (error_string != nullptr)
     {
         qDebug() << "status: " << user_data << ", " << status << ", " << error_string;
@@ -839,6 +879,676 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
     else
     {
         qDebug() << "status: " << user_data << ", " << status;
+    }
+#endif
+
+//    QLabel *label_status = nullptr;
+    bool finished = true;
+    bool skip_error_string = false;
+
+//    log_debug() << "Status: " << status;
+
+#if 0
+    if (sender() == group_img)
+    {
+        log_debug() << "img sender";
+
+        if (status == STATUS_COMPLETE)
+        {
+            log_debug() << "complete";
+
+            //Advance to next stage of image upload
+            if (user_data == ACTION_IMG_UPLOAD)
+            {
+                log_debug() << "is upload";
+
+                if (radio_IMG_Test->isChecked() || radio_IMG_Confirm->isChecked())
+                {
+                    //Mark image for test or confirmation
+                    finished = false;
+
+                    mode = ACTION_IMG_UPLOAD_SET;
+                    processor->set_transport(active_transport());
+                    set_group_transport_settings(smp_groups.img_mgmt);
+                    bool started = smp_groups.img_mgmt->start_image_set(&upload_hash, (radio_IMG_Confirm->isChecked() ? true : false), nullptr);
+                    //todo: check status
+
+                    log_debug() << "do upload of " << upload_hash;
+                }
+            }
+            else if (user_data == ACTION_IMG_UPLOAD_SET)
+            {
+                if (check_IMG_Reset->isChecked())
+                {
+                    //Reboot device
+                    finished = false;
+
+                    mode = ACTION_OS_UPLOAD_RESET;
+                    processor->set_transport(active_transport());
+                    set_group_transport_settings(smp_groups.os_mgmt);
+                    bool started = smp_groups.os_mgmt->start_reset(false);
+                    //todo: check status
+
+                    log_debug() << "do reset";
+                }
+            }
+            else if (user_data == ACTION_IMG_IMAGE_LIST)
+            {
+                uint8_t i = 0;
+                while (i < images_list.length())
+                {
+                    model_image_state.appendRow(images_list[i].item);
+                    ++i;
+                }
+            }
+            else if (user_data == ACTION_IMG_IMAGE_SET)
+            {
+                if (parent_row != -1 && parent_column != -1 && child_row != -1 && child_column != -1)
+                {
+                    uint8_t i = 0;
+
+                    model_image_state.clear();
+
+                    while (i < images_list.length())
+                    {
+                        model_image_state.appendRow(images_list[i].item);
+                        ++i;
+                    }
+
+                    if (model_image_state.hasIndex(parent_row, parent_column) == true && model_image_state.index(child_row, child_column, model_image_state.index(parent_row, parent_column)).isValid() == true)
+                    {
+                        colview_IMG_Images->setCurrentIndex(model_image_state.index(child_row, child_column, model_image_state.index(parent_row, parent_column)));
+                    }
+                    else
+                    {
+                        colview_IMG_Images->previewWidget()->hide();
+                    }
+
+                    parent_row = -1;
+                    parent_column = -1;
+                    child_row = -1;
+                    child_column = -1;
+                }
+                else
+                {
+                    colview_IMG_Images->previewWidget()->hide();
+                }
+            }
+            else if (user_data == ACTION_IMG_IMAGE_SLOT_INFO)
+            {
+                uint16_t i = 0;
+
+                tree_IMG_Slot_Info->clear();
+
+                while (i < img_slot_details.length())
+                {
+                    uint16_t l = 0;
+                    QStringList list_item_text;
+                    QTreeWidgetItem *row_image;
+                    QString field_size;
+
+                    list_item_text << QString("Image ").append(QString::number(img_slot_details.at(i).image));
+
+                    if (img_slot_details.at(i).max_image_size_present == true)
+                    {
+                        size_abbreviation(img_slot_details.at(i).max_image_size, &field_size);
+                        list_item_text << field_size;
+                    }
+
+                    row_image = new QTreeWidgetItem((QTreeWidget *)nullptr, list_item_text);
+
+                    while (l < img_slot_details.at(i).slot_data.length())
+                    {
+                        QTreeWidgetItem *row_slot;
+
+                        list_item_text.clear();
+                        list_item_text << QString("Slot ").append(QString::number(img_slot_details.at(i).slot_data.at(l).slot));
+
+                        if (img_slot_details.at(i).slot_data.at(l).size_present)
+                        {
+                            field_size.clear();
+                            size_abbreviation(img_slot_details.at(i).slot_data.at(l).size, &field_size);
+                            list_item_text << field_size;
+                        }
+
+                        if (img_slot_details.at(i).slot_data.at(l).upload_image_id_present)
+                        {
+                            list_item_text << QString::number(img_slot_details.at(i).slot_data.at(l).upload_image_id);
+                        }
+
+                        row_slot = new QTreeWidgetItem(row_image, list_item_text);
+
+                        ++l;
+                    }
+
+                    tree_IMG_Slot_Info->addTopLevelItem(row_image);
+
+                    ++i;
+                }
+
+                //Expand all entries
+                tree_IMG_Slot_Info->expandAll();
+            }
+        }
+        else if (status == STATUS_UNSUPPORTED)
+        {
+            log_debug() << "unsupported";
+
+            //Advance to next stage of image upload, this is likely to occur in MCUboot serial recovery whereby the image state functionality is not included
+            if (user_data == ACTION_IMG_UPLOAD_SET)
+            {
+                skip_error_string = true;
+
+                if (check_IMG_Reset->isChecked())
+                {
+                    //Reboot device
+                    finished = false;
+
+                    mode = ACTION_OS_UPLOAD_RESET;
+                    processor->set_transport(active_transport());
+                    set_group_transport_settings(smp_groups.os_mgmt);
+                    bool started = smp_groups.os_mgmt->start_reset(false);
+                    //todo: check status
+
+                    log_debug() << "do reset";
+
+                    lbl_IMG_Status->setText("Resetting...");
+                }
+                else
+                {
+                    lbl_IMG_Status->setText("Upload finished, set image state failed: command not supported (likely MCUboot serial recovery)");
+                }
+            }
+        }
+    }
+    else if (sender() == group_os)
+#endif
+if (sender() == group_os)
+    {
+        log_debug() << "os sender";
+//        label_status = lbl_OS_Status;
+
+        if (status == STATUS_COMPLETE)
+        {
+            log_debug() << "complete";
+
+            if (user_data == ACTION_OS_ECHO)
+            {
+//                edit_OS_Echo_Output->appendPlainText(error_string);
+//                error_string = nullptr;
+            }
+            else if (user_data == ACTION_OS_UPLOAD_RESET)
+            {
+            }
+            else if (user_data == ACTION_OS_RESET)
+            {
+            }
+#if 0
+            else if (user_data == ACTION_OS_MEMORY_POOL)
+            {
+                uint16_t i = 0;
+                uint16_t l = table_OS_Memory->rowCount();
+
+                table_OS_Memory->setSortingEnabled(false);
+
+                while (i < memory_list.length())
+                {
+                    if (i >= l)
+                    {
+                        table_OS_Memory->insertRow(i);
+
+                        QTableWidgetItem *row_name = new QTableWidgetItem(memory_list[i].name);
+                        QTableWidgetItem *row_size = new QTableWidgetItem(QString::number(memory_list[i].blocks * memory_list[i].size));
+                        QTableWidgetItem *row_free = new QTableWidgetItem(QString::number(memory_list[i].free * memory_list[i].size));
+                        QTableWidgetItem *row_minimum = new QTableWidgetItem(QString::number(memory_list[i].minimum * memory_list[i].size));
+
+                        table_OS_Memory->setItem(i, 0, row_name);
+                        table_OS_Memory->setItem(i, 1, row_size);
+                        table_OS_Memory->setItem(i, 2, row_free);
+                        table_OS_Memory->setItem(i, 3, row_minimum);
+                    }
+                    else
+                    {
+                        table_OS_Memory->item(i, 0)->setText(memory_list[i].name);
+                        table_OS_Memory->item(i, 1)->setText(QString::number(memory_list[i].blocks * memory_list[i].size));
+                        table_OS_Memory->item(i, 2)->setText(QString::number(memory_list[i].free * memory_list[i].size));
+                        table_OS_Memory->item(i, 3)->setText(QString::number(memory_list[i].minimum * memory_list[i].size));
+                    }
+
+                    ++i;
+                }
+
+                while (i < l)
+                {
+                    table_OS_Memory->removeRow((table_OS_Memory->rowCount() - 1));
+                    ++i;
+                }
+
+                table_OS_Memory->setSortingEnabled(true);
+            }
+            else if (user_data == ACTION_OS_TASK_STATS)
+            {
+                uint16_t i = 0;
+                uint16_t l = table_OS_Tasks->rowCount();
+
+                table_OS_Tasks->setSortingEnabled(false);
+
+                while (i < task_list.length())
+                {
+                    if (i >= l)
+                    {
+                        table_OS_Tasks->insertRow(i);
+
+                        QTableWidgetItem *row_name = new QTableWidgetItem(task_list[i].name);
+                        QTableWidgetItem *row_id = new QTableWidgetItem(QString::number(task_list[i].id));
+                        QTableWidgetItem *row_priority = new QTableWidgetItem(QString::number(task_list[i].priority));
+                        QTableWidgetItem *row_state = new QTableWidgetItem(QString::number(task_list[i].state));
+                        QTableWidgetItem *row_context_switches = new QTableWidgetItem(QString::number(task_list[i].context_switches));
+                        QTableWidgetItem *row_runtime = new QTableWidgetItem(QString::number(task_list[i].runtime));
+                        QTableWidgetItem *row_stack_size = new QTableWidgetItem(QString::number(task_list[i].stack_size * 4));
+                        QTableWidgetItem *row_stack_usage = new QTableWidgetItem(QString::number(task_list[i].stack_usage * 4));
+
+                        table_OS_Tasks->setItem(i, 0, row_name);
+                        table_OS_Tasks->setItem(i, 1, row_id);
+                        table_OS_Tasks->setItem(i, 2, row_priority);
+                        table_OS_Tasks->setItem(i, 3, row_state);
+                        table_OS_Tasks->setItem(i, 4, row_context_switches);
+                        table_OS_Tasks->setItem(i, 5, row_runtime);
+                        table_OS_Tasks->setItem(i, 6, row_stack_size);
+                        table_OS_Tasks->setItem(i, 7, row_stack_usage);
+                    }
+                    else
+                    {
+                        table_OS_Tasks->item(i, 0)->setText(task_list[i].name);
+                        table_OS_Tasks->item(i, 1)->setText(QString::number(task_list[i].id));
+                        table_OS_Tasks->item(i, 2)->setText(QString::number(task_list[i].priority));
+                        table_OS_Tasks->item(i, 3)->setText(QString::number(task_list[i].state));
+                        table_OS_Tasks->item(i, 4)->setText(QString::number(task_list[i].context_switches));
+                        table_OS_Tasks->item(i, 5)->setText(QString::number(task_list[i].runtime));
+                        table_OS_Tasks->item(i, 6)->setText(QString::number(task_list[i].stack_size * sizeof(uint32_t)));
+                        table_OS_Tasks->item(i, 7)->setText(QString::number(task_list[i].stack_usage * sizeof(uint32_t)));
+                    }
+
+                    ++i;
+                }
+
+                while (i < l)
+                {
+                    table_OS_Tasks->removeRow((table_OS_Tasks->rowCount() - 1));
+                    ++i;
+                }
+
+                table_OS_Tasks->setSortingEnabled(true);
+            }
+            else if (user_data == ACTION_OS_MCUMGR_BUFFER)
+            {
+                edit_OS_Info_Output->clear();
+                edit_OS_Info_Output->appendPlainText(error_string);
+                error_string = nullptr;
+            }
+            else if (user_data == ACTION_OS_OS_APPLICATION_INFO)
+            {
+                edit_OS_Info_Output->clear();
+                edit_OS_Info_Output->appendPlainText(error_string);
+                error_string = nullptr;
+            }
+            else if (user_data == ACTION_OS_BOOTLOADER_INFO)
+            {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+                switch (bootloader_info_response.typeId())
+#else
+                switch (bootloader_info_response.type())
+#endif
+                {
+                case QMetaType::Bool:
+                {
+                    edit_os_bootloader_response->setText(bootloader_info_response.toBool() == true ? "True" : "False");
+                    break;
+                }
+
+                case QMetaType::Int:
+                {
+                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toInt()));
+                    break;
+                }
+
+                case QMetaType::LongLong:
+                {
+                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toLongLong()));
+                    break;
+                }
+
+                case QMetaType::UInt:
+                {
+                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toUInt()));
+                    break;
+                }
+
+                case QMetaType::ULongLong:
+                {
+                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toULongLong()));
+                    break;
+                }
+
+                case QMetaType::Double:
+                {
+                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toDouble()));
+                    break;
+                }
+
+                case QMetaType::QString:
+                {
+                    edit_os_bootloader_response->setText(bootloader_info_response.toString());
+                    break;
+                }
+
+                default:
+                {
+                    error_string = "Invalid";
+                }
+                }
+            }
+            else if (user_data == ACTION_OS_DATETIME_GET)
+            {
+                int index;
+                log_debug() << "RTC response: " << rtc_time_date_response;
+
+                rtc_time_date_response.setTimeZone(rtc_time_date_response.timeZone());
+                index = combo_os_datetime_timezone->findText(rtc_time_date_response.timeZone().displayName(rtc_time_date_response, QTimeZone::OffsetName));
+
+                if (index >= 0)
+                {
+                    combo_os_datetime_timezone->setCurrentIndex(index);
+                }
+
+                edit_os_datetime_date_time->setDateTime(rtc_time_date_response);
+            }
+            else if (user_data == ACTION_OS_DATETIME_SET)
+            {
+            }
+#endif
+        }
+    }
+#if 0
+    else if (sender() == group_shell)
+    {
+        log_debug() << "shell sender";
+        label_status = lbl_SHELL_Status;
+
+        if (status == STATUS_COMPLETE)
+        {
+            log_debug() << "complete";
+
+            if (user_data == ACTION_SHELL_EXECUTE)
+            {
+                edit_SHELL_Output->add_dat_in_text(error_string.toUtf8());
+
+                if (shell_rc == 0)
+                {
+                    error_string = nullptr;
+                }
+                else
+                {
+                    error_string = QString("Finished, error (ret): ").append(QString::number(shell_rc));
+                }
+            }
+        }
+    }
+    else if (sender() == group_stat)
+    {
+        log_debug() << "stat sender";
+        label_status = lbl_STAT_Status;
+
+        if (status == STATUS_COMPLETE)
+        {
+            log_debug() << "complete";
+
+            if (user_data == ACTION_STAT_GROUP_DATA)
+            {
+                uint16_t i = 0;
+                uint16_t l = table_STAT_Values->rowCount();
+
+                table_STAT_Values->setSortingEnabled(false);
+
+                while (i < stat_list.length())
+                {
+                    if (i >= l)
+                    {
+                        table_STAT_Values->insertRow(i);
+
+                        QTableWidgetItem *row_name = new QTableWidgetItem(stat_list[i].name);
+                        QTableWidgetItem *row_value = new QTableWidgetItem(QString::number(stat_list[i].value));
+
+
+                        table_STAT_Values->setItem(i, 0, row_name);
+                        table_STAT_Values->setItem(i, 1, row_value);
+                    }
+                    else
+                    {
+                        table_STAT_Values->item(i, 0)->setText(stat_list[i].name);
+                        table_STAT_Values->item(i, 1)->setText(QString::number(stat_list[i].value));
+                    }
+
+                    ++i;
+                }
+
+                while (i < l)
+                {
+                    table_STAT_Values->removeRow((table_STAT_Values->rowCount() - 1));
+                    ++i;
+                }
+
+                table_STAT_Values->setSortingEnabled(true);
+            }
+            else if (user_data == ACTION_STAT_LIST_GROUPS)
+            {
+                combo_STAT_Group->clear();
+                combo_STAT_Group->addItems(group_list);
+            }
+        }
+    }
+    else if (sender() == group_fs)
+    {
+        log_debug() << "fs sender";
+        label_status = lbl_FS_Status;
+
+        if (status == STATUS_COMPLETE)
+        {
+            log_debug() << "complete";
+
+            if (user_data == ACTION_FS_UPLOAD)
+            {
+                //edit_FS_Log->appendPlainText("todo");
+            }
+            else if (user_data == ACTION_FS_DOWNLOAD)
+            {
+                //edit_FS_Log->appendPlainText("todo2");
+            }
+            else if (user_data == ACTION_FS_HASH_CHECKSUM)
+            {
+                error_string.prepend("Finished hash/checksum using ");
+                edit_FS_Result->setText(fs_hash_checksum_response.toHex());
+                edit_FS_Size->setText(QString::number(fs_size_response));
+            }
+            else if (user_data == ACTION_FS_SUPPORTED_HASHES_CHECKSUMS)
+            {
+                uint8_t i = 0;
+
+                combo_FS_type->clear();
+
+                while (i < supported_hash_checksum_list.length())
+                {
+                    combo_FS_type->addItem(supported_hash_checksum_list.at(i).name);
+                    log_debug() << supported_hash_checksum_list.at(i).format << ", " << supported_hash_checksum_list.at(i).size;
+                    ++i;
+                }
+            }
+            else if (user_data == ACTION_FS_STATUS)
+            {
+                edit_FS_Size->setText(QString::number(fs_size_response));
+            }
+        }
+    }
+    else if (sender() == group_settings)
+    {
+        log_debug() << "settings sender";
+        label_status = lbl_settings_status;
+
+        if (status == STATUS_COMPLETE)
+        {
+            log_debug() << "complete";
+
+            if (user_data == ACTION_SETTINGS_READ)
+            {
+                edit_settings_value->setText(settings_read_response.toHex());
+
+                if (update_settings_display() == false)
+                {
+                    error_string = QString("Error: data is %1 bytes, cannot convert to decimal number").arg(QString::number(settings_read_response.length()));
+                }
+            }
+            else if (user_data == ACTION_SETTINGS_WRITE || user_data == ACTION_SETTINGS_DELETE || user_data == ACTION_SETTINGS_COMMIT || user_data == ACTION_SETTINGS_LOAD || user_data == ACTION_SETTINGS_SAVE)
+            {
+            }
+        }
+    }
+    else if (sender() == group_zephyr)
+    {
+        log_debug() << "zephyr sender";
+        label_status = lbl_zephyr_status;
+
+        if (user_data == ACTION_ZEPHYR_STORAGE_ERASE)
+        {
+        }
+    }
+    else if (sender() == group_enum)
+    {
+        log_debug() << "enum sender";
+        label_status = lbl_enum_status;
+
+        if (user_data == ACTION_ENUM_COUNT)
+        {
+            edit_Enum_Count->setText(QString::number(enum_count));
+        }
+        else if (user_data == ACTION_ENUM_LIST)
+        {
+            uint16_t i = 0;
+            uint16_t l = table_Enum_List_Details->rowCount();
+
+            table_Enum_List_Details->setSortingEnabled(false);
+
+            while (i < enum_groups.length())
+            {
+                if (i >= l)
+                {
+                    table_Enum_List_Details->insertRow(i);
+
+                    QTableWidgetItem *row_id = new QTableWidgetItem(QString::number(enum_groups[i]));
+                    QTableWidgetItem *row_name = new QTableWidgetItem("");
+                    QTableWidgetItem *row_handlers = new QTableWidgetItem("");
+
+                    table_Enum_List_Details->setItem(i, 0, row_id);
+                    table_Enum_List_Details->setItem(i, 1, row_name);
+                    table_Enum_List_Details->setItem(i, 2, row_handlers);
+                }
+                else
+                {
+                    table_Enum_List_Details->item(i, 0)->setText(QString::number(enum_groups[i]));
+                    table_Enum_List_Details->item(i, 1)->setText("");
+                    table_Enum_List_Details->item(i, 2)->setText("");
+                }
+
+                ++i;
+            }
+
+            while (i < l)
+            {
+                table_Enum_List_Details->removeRow((table_Enum_List_Details->rowCount() - 1));
+                ++i;
+            }
+
+            table_Enum_List_Details->setSortingEnabled(true);
+        }
+        else if (user_data == ACTION_ENUM_SINGLE)
+        {
+            edit_Enum_Count->setText(QString("ID: ").append(QString::number(enum_single_id)).append(", end: ").append(QString::number(enum_single_end)));
+        }
+        else if (user_data == ACTION_ENUM_DETAILS)
+        {
+            uint16_t i = 0;
+            uint16_t l = table_Enum_List_Details->rowCount();
+
+            table_Enum_List_Details->setSortingEnabled(false);
+
+            while (i < enum_details.length())
+            {
+                if (i >= l)
+                {
+                    table_Enum_List_Details->insertRow(i);
+
+                    QTableWidgetItem *row_id = new QTableWidgetItem(QString::number(enum_details[i].id));
+                    QTableWidgetItem *row_name = new QTableWidgetItem(enum_details[i].name);
+                    QTableWidgetItem *row_handlers = new QTableWidgetItem(QString::number(enum_details[i].handlers));
+
+                    table_Enum_List_Details->setItem(i, 0, row_id);
+                    table_Enum_List_Details->setItem(i, 1, row_name);
+                    table_Enum_List_Details->setItem(i, 2, row_handlers);
+                }
+                else
+                {
+                    table_Enum_List_Details->item(i, 0)->setText(QString::number(enum_details[i].id));
+                    table_Enum_List_Details->item(i, 1)->setText(enum_details[i].name);
+                    table_Enum_List_Details->item(i, 2)->setText(QString::number(enum_details[i].handlers));
+                }
+
+                ++i;
+            }
+
+            while (i < l)
+            {
+                table_Enum_List_Details->removeRow((table_Enum_List_Details->rowCount() - 1));
+                ++i;
+            }
+
+            table_Enum_List_Details->setSortingEnabled(true);
+        }
+    }
+#endif
+
+    if (finished == true)
+    {
+        mode = ACTION_IDLE;
+        //relase_transport();
+
+        if (error_string == nullptr)
+        {
+            if (status == STATUS_COMPLETE)
+            {
+                error_string = QString("Finished");
+            }
+            else if (status == STATUS_ERROR)
+            {
+                error_string = QString("Error");
+            }
+            else if (status == STATUS_TIMEOUT)
+            {
+                error_string = QString("Command timed out");
+            }
+            else if (status == STATUS_CANCELLED)
+            {
+                error_string = QString("Cancelled");
+            }
+        }
+    }
+
+    if (error_string != nullptr && skip_error_string == false)
+    {
+        qDebug() << error_string;
+    }
+
+    if (finished == true)
+    {
+        QCoreApplication::exit(EXIT_CODE_SUCCESS);
     }
 }
 

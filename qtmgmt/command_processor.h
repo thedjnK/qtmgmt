@@ -31,7 +31,12 @@
 #include <QCommandLineParser>
 #include <smp_group_os_mgmt.h>
 #include <smp_processor.h>
+#if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
 #include <smp_uart.h>
+#endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
+#include <smp_udp.h>
+#endif
 
 /******************************************************************************/
 // Enum typedefs
@@ -133,6 +138,7 @@ private:
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
     void add_transport_options_udp(QList<entry_t> *entries);
+    int configure_transport_options_udp(smp_udp *transport, QCommandLineParser *parser);
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
     void add_transport_options_lorawan(QList<entry_t> *entries);
@@ -161,7 +167,12 @@ private:
 
     smp_processor *processor;
     smp_group_os_mgmt *group_os;
+#if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
     smp_uart *transport_uart;
+#endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
+    smp_udp *transport_udp;
+#endif
 
     smp_transport *active_transport;
     smp_group *active_group;

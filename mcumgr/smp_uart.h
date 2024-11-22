@@ -23,12 +23,18 @@
 #ifndef SMP_UART_H
 #define SMP_UART_H
 
+/******************************************************************************/
+// Include Files
+/******************************************************************************/
 #include <QObject>
 #include <QSerialPort>
 #include <smp_transport.h>
 #include <smp_message.h>
 #include <debug_logger.h>
 
+/******************************************************************************/
+// Enum typedefs
+/******************************************************************************/
 enum smp_uart_flow_control_t {
     SMP_UART_FLOW_CONTROL_NONE,
     SMP_UART_FLOW_CONTROL_SOFTWARE,
@@ -62,6 +68,9 @@ enum smp_uart_stop_bits_t {
     SMP_UART_STOP_BITS_COUNT
 };
 
+/******************************************************************************/
+// Forward declaration of Class, Struct & Unions
+/******************************************************************************/
 struct smp_uart_config_t {
     QString port_name;
     uint32_t baud;
@@ -71,6 +80,9 @@ struct smp_uart_config_t {
     enum smp_uart_stop_bits_t stop_bits;
 };
 
+/******************************************************************************/
+// Class definitions
+/******************************************************************************/
 class smp_uart : public smp_transport
 {
     Q_OBJECT
@@ -109,3 +121,7 @@ private:
 };
 
 #endif // SMP_UART_H
+
+/******************************************************************************/
+// END OF FILE
+/******************************************************************************/

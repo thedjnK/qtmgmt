@@ -14,7 +14,7 @@ qtHaveModule(bluetooth) {
 
 qtHaveModule(network) {
     # Requires qtnetwork
-#    DEFINES += PLUGIN_MCUMGR_TRANSPORT_UDP
+    DEFINES += PLUGIN_MCUMGR_TRANSPORT_UDP
 
     qtHaveModule(mqtt) {
 	# Requires qtnetwork and qtmqtt
