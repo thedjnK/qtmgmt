@@ -1,0 +1,4 @@
+[submodule "AuTerm"]
+	path = mcumgr/AuTerm
+	url = https://github.com/thedjnK/AuTerm.git
+	branch = testing
