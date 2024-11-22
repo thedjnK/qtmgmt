@@ -1,0 +1,28 @@
+name: Issue assignment
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-assign:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    if: github.repository == 'thedjnK/qtmgmt'
+    steps:
+      - name: 'Auto-assign issue'
+        if: ${{ toJSON(github.event.issue.assignees.*.login) == '[]' }}
+        uses: pozil/auto-assign-issue@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          assignees: thedjnK
+          allowSelfAssign: true
+      - name: 'Auto-label issue'
+        if: ${{ toJSON(github.event.issue.labels.*.name) == '[]' }}
+        run: gh issue edit "$NUMBER" --add-label "$LABELS"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          LABELS: triage
