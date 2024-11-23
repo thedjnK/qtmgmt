@@ -22,6 +22,7 @@ SOURCES += \
     AuTerm/plugins/mcumgr/smp_group_enum_mgmt.cpp \
     AuTerm/plugins/mcumgr/smp_group_fs_mgmt.cpp \
     AuTerm/plugins/mcumgr/smp_group_os_mgmt.cpp \
+    AuTerm/plugins/mcumgr/smp_group_img_mgmt.cpp \
     AuTerm/plugins/mcumgr/smp_group_settings_mgmt.cpp \
     AuTerm/plugins/mcumgr/smp_group_shell_mgmt.cpp \
     AuTerm/plugins/mcumgr/smp_group_stat_mgmt.cpp \
@@ -29,7 +30,6 @@ SOURCES += \
     AuTerm/plugins/mcumgr/smp_message.cpp \
     AuTerm/plugins/mcumgr/smp_processor.cpp
 #    AuTerm/plugins/mcumgr/smp_json.cpp \
-#    AuTerm/plugins/mcumgr/smp_group_img_mgmt.cpp
 
 HEADERS += \
     AuTerm/AuTerm/AutPlugin.h \
@@ -40,6 +40,7 @@ HEADERS += \
     AuTerm/plugins/mcumgr/smp_group_enum_mgmt.h \
     AuTerm/plugins/mcumgr/smp_group_fs_mgmt.h \
     AuTerm/plugins/mcumgr/smp_group_os_mgmt.h \
+    AuTerm/plugins/mcumgr/smp_group_img_mgmt.h \
     AuTerm/plugins/mcumgr/smp_group_settings_mgmt.h \
     AuTerm/plugins/mcumgr/smp_group_shell_mgmt.h \
     AuTerm/plugins/mcumgr/smp_group_stat_mgmt.h \
@@ -49,7 +50,6 @@ HEADERS += \
     AuTerm/plugins/mcumgr/smp_transport.h \
     AuTerm/plugins/mcumgr/smp_group.h
 #    AuTerm/plugins/mcumgr/smp_json.h \
-#    AuTerm/plugins/mcumgr/smp_group_img_mgmt.h
 
 DISTFILES += AuTerm/plugins/mcumgr/plugin_mcumgr.json
 
