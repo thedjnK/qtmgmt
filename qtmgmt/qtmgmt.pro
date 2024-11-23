@@ -1,7 +1,7 @@
 include(../qtmgmt-includes.pri)
 
 QT = core
-QT += serialport bluetooth network
+QT += serialport $$ADDITIONAL_MODULES
 
 CONFIG += c++17 cmdline
 

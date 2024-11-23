@@ -34,11 +34,14 @@
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
 #include <smp_uart.h>
 #endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
+#include <smp_bluetooth.h>
+#endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
 #include <smp_udp.h>
 #endif
-#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
-#include <smp_bluetooth.h>
+#if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
+#include <smp_lorawan.h>
 #endif
 
 /******************************************************************************/
@@ -148,6 +151,7 @@ private:
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
     void add_transport_options_lorawan(QList<entry_t> *entries);
+    int configure_transport_options_lorawan(smp_lorawan *transport, QCommandLineParser *parser);
 #endif
 
     void add_group_options_enum(QList<entry_t> *entries, QString command);
@@ -176,11 +180,14 @@ private:
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
     smp_uart *transport_uart;
 #endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
+    smp_bluetooth *transport_bluetooth;
+#endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
     smp_udp *transport_udp;
 #endif
-#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
-    smp_bluetooth *transport_bluetooth;
+#if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
+    smp_lorawan *transport_lorawan;
 #endif
     smp_transport *active_transport;
     smp_group *active_group;

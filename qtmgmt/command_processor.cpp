@@ -44,7 +44,14 @@ const QCommandLineOption option_transport_udp_host("host", "UDP host", "host");
 const QCommandLineOption option_transport_udp_port("port", "UDP port", "port");
 
 //LoRaWAN
-//const QCommandLineOption option_transport_lorawan_("port", "UART port", "port");
+const QCommandLineOption option_transport_lorawan_host("host", "LoRaWAN host", "host");
+const QCommandLineOption option_transport_lorawan_port("port", "LoRaWAN port", "port");
+const QCommandLineOption option_transport_lorawan_tls("tls", "LoRaWAN use TLS for connection");
+const QCommandLineOption option_transport_lorawan_no_tls("no-tls", "LoRaWAN do not use TLS for connection");
+const QCommandLineOption option_transport_lorawan_username("username", "LoRaWAN username", "username");
+const QCommandLineOption option_transport_lorawan_password("password", "LoRaWAN password", "password");
+const QCommandLineOption option_transport_lorawan_topic("topic", "LoRaWAN MQTT topic", "topic");
+const QCommandLineOption option_transport_lorawan_frame_port("frame-port", "LoRaWAN frame port", "port");
 
 const QString value_group_enum = "enum";
 const QString value_group_fs = "fs";
@@ -386,6 +393,16 @@ void command_processor::run()
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
     else if (user_transport == value_transport_lorawan)
     {
+        transport_lorawan = new smp_lorawan(this);
+        active_transport = transport_lorawan;
+
+        exit_code = configure_transport_options_lorawan(transport_lorawan, &parser);
+
+        if (exit_code != EXIT_CODE_SUCCESS)
+        {
+            QCoreApplication::exit(exit_code);
+            return;
+        }
     }
 #endif
 
@@ -677,6 +694,72 @@ int command_processor::configure_transport_options_udp(smp_udp *transport, QComm
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
 void command_processor::add_transport_options_lorawan(QList<entry_t> *entries)
 {
+    entries->append({&option_transport_lorawan_host, true, false, nullptr});
+    entries->append({&option_transport_lorawan_port, false, false, nullptr});
+    entries->append({&option_transport_lorawan_tls, false, false, nullptr});
+    entries->append({&option_transport_lorawan_no_tls, false, false, nullptr});
+    entries->append({&option_transport_lorawan_username, true, false, nullptr});
+    entries->append({&option_transport_lorawan_password, true, false, nullptr});
+    entries->append({&option_transport_lorawan_topic, true, false, nullptr});
+    entries->append({&option_transport_lorawan_frame_port, true, false, nullptr});
+}
+
+int command_processor::configure_transport_options_lorawan(smp_lorawan *transport, QCommandLineParser *parser)
+{
+    struct smp_lorawan_config_t lorawan_configuration;
+    bool converted = false;
+
+    lorawan_configuration.hostname = parser->value(option_transport_lorawan_host);
+    lorawan_configuration.username = parser->value(option_transport_lorawan_username);
+    lorawan_configuration.password = parser->value(option_transport_lorawan_password);
+    lorawan_configuration.topic = parser->value(option_transport_lorawan_topic);
+
+    if (parser->isSet(option_transport_lorawan_tls) == true)
+    {
+        lorawan_configuration.tls = true;
+    }
+    else if (parser->isSet(option_transport_lorawan_no_tls) == true)
+    {
+        lorawan_configuration.tls = false;
+    }
+    else
+    {
+        lorawan_configuration.tls = true;
+    }
+
+    if (parser->isSet(option_transport_lorawan_port) == true)
+    {
+        lorawan_configuration.port = parser->value(option_transport_lorawan_port).toUInt(&converted);
+
+        if (converted == false)
+        {
+            return EXIT_CODE_NUMERIAL_ARGUMENT_CONVERSION_FAILED;
+        }
+    }
+    else
+    {
+        if (lorawan_configuration.tls == true)
+        {
+            lorawan_configuration.port = 8883;
+        }
+        else
+        {
+            lorawan_configuration.port = 1883;
+        }
+    }
+
+    converted = false;
+
+    lorawan_configuration.frame_port = parser->value(option_transport_lorawan_frame_port).toUInt(&converted);
+
+    if (converted == false)
+    {
+        return EXIT_CODE_NUMERIAL_ARGUMENT_CONVERSION_FAILED;
+    }
+
+    transport->set_connection_config(&lorawan_configuration);
+
+    return EXIT_CODE_SUCCESS;
 }
 #endif
 

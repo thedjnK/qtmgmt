@@ -18,7 +18,7 @@ qtHaveModule(network) {
 
     qtHaveModule(mqtt) {
 	# Requires qtnetwork and qtmqtt
-#        DEFINES += PLUGIN_MCUMGR_TRANSPORT_LORAWAN
+	DEFINES += PLUGIN_MCUMGR_TRANSPORT_LORAWAN
     }
 }
 
