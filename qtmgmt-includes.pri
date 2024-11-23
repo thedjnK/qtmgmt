@@ -9,7 +9,7 @@ DEFINES += PLUGIN_MCUMGR_TRANSPORT_UART
 
 qtHaveModule(bluetooth) {
     # Requires qtconnectivity
-#    DEFINES += PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH
+    DEFINES += PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH
 }
 
 qtHaveModule(network) {

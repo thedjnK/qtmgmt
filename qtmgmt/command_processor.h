@@ -37,6 +37,9 @@
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
 #include <smp_udp.h>
 #endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
+#include <smp_bluetooth.h>
+#endif
 
 /******************************************************************************/
 // Enum typedefs
@@ -118,6 +121,8 @@ private slots:
     //void custom_message_callback(enum custom_message_callback_t type, smp_error_t *data);
     void status(uint8_t user_data, group_status status, QString error_string);
     void progress(uint8_t user_data, uint8_t percent);
+    void transport_connected();
+    void transport_disconnected();
 
 signals:
 
@@ -135,6 +140,7 @@ private:
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
     void add_transport_options_bluetooth(QList<entry_t> *entries);
+    int configure_transport_options_bluetooth(smp_bluetooth *transport, QCommandLineParser *parser);
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
     void add_transport_options_udp(QList<entry_t> *entries);
@@ -173,7 +179,9 @@ private:
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
     smp_udp *transport_udp;
 #endif
-
+#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
+    smp_bluetooth *transport_bluetooth;
+#endif
     smp_transport *active_transport;
     smp_group *active_group;
 

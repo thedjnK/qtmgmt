@@ -168,6 +168,7 @@ void command_processor::run()
     uint8_t i;
     uint8_t l;
     bool failed = false;
+    QEventLoop wait_loop;
 
     parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
     parser.addOption(option_help);
@@ -355,6 +356,16 @@ void command_processor::run()
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
     else if (user_transport == value_transport_bluetooth)
     {
+        transport_bluetooth = new smp_bluetooth(this);
+        active_transport = transport_bluetooth;
+
+        exit_code = configure_transport_options_bluetooth(transport_bluetooth, &parser);
+
+        if (exit_code != EXIT_CODE_SUCCESS)
+        {
+            QCoreApplication::exit(exit_code);
+            return;
+        }
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
@@ -379,6 +390,9 @@ void command_processor::run()
 #endif
 
     //Open transport, exit if it failed
+    connect(active_transport, SIGNAL(connected()), this, SLOT(transport_connected()));
+    connect(active_transport, SIGNAL(disconnected()), this, SLOT(transport_disconnected()));
+    connect(active_transport, SIGNAL(connected()), &wait_loop, SLOT(quit()));
     exit_code = active_transport->connect();
 
     if (exit_code != SMP_TRANSPORT_ERROR_OK)
@@ -388,7 +402,14 @@ void command_processor::run()
         return;
     }
 
-    //Wait for connection to establish
+    if (active_transport->is_connected() == false)
+    {
+        //Wait for connection to establish
+//TODO: needs to also wait on error and have a timeout
+        wait_loop.exec();
+    }
+
+    disconnect(active_transport, SIGNAL(connected()), &wait_loop, SLOT(quit()));
 
     //Issue specified command
     processor = new smp_processor(this);
@@ -592,8 +613,29 @@ int command_processor::configure_transport_options_uart(smp_uart *transport, QCo
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
 void command_processor::add_transport_options_bluetooth(QList<entry_t> *entries)
 {
-    parser->addOption(option_transport_bluetooth_name);
-    parser->addOption(option_transport_bluetooth_address);
+    //TODO: make exclusive
+    entries->append({&option_transport_bluetooth_name, false, false, nullptr});
+    entries->append({&option_transport_bluetooth_address, false, false, nullptr});
+}
+
+int command_processor::configure_transport_options_bluetooth(smp_bluetooth *transport, QCommandLineParser *parser)
+{
+    struct smp_bluetooth_config_t bluetooth_configuration;
+
+    if (parser->isSet(option_transport_bluetooth_name) == true)
+    {
+        bluetooth_configuration.name = parser->value(option_transport_bluetooth_name);
+        bluetooth_configuration.type = SMP_BLUETOOTH_CONNECT_TYPE_NAME;
+    }
+    else if (parser->isSet(option_transport_bluetooth_address) == true)
+    {
+        bluetooth_configuration.address = parser->value(option_transport_bluetooth_address);
+        bluetooth_configuration.type = SMP_BLUETOOTH_CONNECT_TYPE_ADDRESS;
+    }
+
+    transport->set_connection_config(&bluetooth_configuration);
+
+    return EXIT_CODE_SUCCESS;
 }
 #endif
 
@@ -1555,6 +1597,14 @@ if (sender() == group_os)
 void command_processor::progress(uint8_t user_data, uint8_t percent)
 {
     qDebug() << "progress: " << user_data << ", " << percent;
+}
+
+void command_processor::transport_connected()
+{
+}
+
+void command_processor::transport_disconnected()
+{
 }
 
 /******************************************************************************/
