@@ -120,6 +120,11 @@ const QCommandLineOption option_command_img_file("file", "Firmware update", "fil
 const QCommandLineOption option_command_img_upgrade("upgrade", "Only accept upgrades");
 const QCommandLineOption option_command_img_slot("slot", "Slot number", "slot");
 
+//SMP options
+const QCommandLineOption option_mtu("mtu", "MTU (default: 256, can be: 96-16384)", "mtu");
+const QCommandLineOption option_smp_v1("smp-v1", "Use SMP version 1");
+const QCommandLineOption option_smp_v2("smp-v2", "Use SMP version 2 (default)");
+
 /******************************************************************************/
 // Local Functions or Private Members
 /******************************************************************************/
@@ -131,8 +136,6 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
     transport_uart = nullptr;
     active_transport = nullptr;
     mode = ACTION_IDLE;
-    
-    //TODO: Dummy values
     smp_v2 = true;
     smp_mtu = 256;
 
@@ -203,6 +206,7 @@ void command_processor::run()
     parser.addOption(option_transport);
     parser.addOption(option_group);
     parser.addOption(option_command);
+    parser.addOption(option_mtu);
     parser.parse(QCoreApplication::arguments());
 
     if (parser.isSet(option_version))
@@ -232,6 +236,9 @@ void command_processor::run()
         QCoreApplication::exit(EXIT_CODE_MISSING_REQUIRED_ARGUMENTS);
         return;
     }
+
+    //Add SMP version command line
+    entries.append({{&option_smp_v1, &option_smp_v2}, false, true});
 
     user_transport = parser.value(option_transport);
 
@@ -434,6 +441,29 @@ void command_processor::run()
     }
 
 //TODO: Check that options supplied for each transport/group are valid
+
+    //Apply SMP parameters
+    if (parser.isSet(option_mtu) == true)
+    {
+        smp_mtu = parser.value(option_mtu).toUInt();
+
+//TODO: consts
+        if (smp_mtu < 96 || smp_mtu > 16384)
+        {
+            fputs(qPrintable(tr("Argument out of range: ") % "--" % option_mtu.names().first() % "\n"), stdout);
+            QCoreApplication::exit(EXIT_CODE_NUMERIAL_ARGUMENT_OUT_OF_RANGE);
+            return;
+        }
+    }
+
+    if (parser.isSet(option_smp_v1) == true)
+    {
+        smp_v2 = false;
+    }
+    else if (parser.isSet(option_smp_v2) == true)
+    {
+        smp_v2 = true;
+    }
 
     //Set up and open transport
     if (0)
