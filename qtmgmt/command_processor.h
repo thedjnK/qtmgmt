@@ -169,17 +169,19 @@ private:
     void add_group_options_zephyr(QList<entry_t> *entries, QString command);
     void add_group_options_img(QList<entry_t> *entries, QString command);
 
-    //int run_group_enum(QCommandLineParser *parser, QString command);
-    //int run_group_fs(QCommandLineParser *parser, QString command);
+    int run_group_enum(QCommandLineParser *parser, QString command);
+    int run_group_fs(QCommandLineParser *parser, QString command);
     int run_group_os(QCommandLineParser *parser, QString command);
-    //int run_group_settings(QCommandLineParser *parser, QString command);
-    //int run_group_shell(QCommandLineParser *parser, QString command);
-    //int run_group_stat(QCommandLineParser *parser, QString command);
-    //int run_group_zephyr(QCommandLineParser *parser, QString command);
+    int run_group_settings(QCommandLineParser *parser, QString command);
+    int run_group_shell(QCommandLineParser *parser, QString command);
+    int run_group_stat(QCommandLineParser *parser, QString command);
+    int run_group_zephyr(QCommandLineParser *parser, QString command);
     int run_group_img(QCommandLineParser *parser, QString command);
 
     void set_group_transport_settings(smp_group *group);
     void set_group_transport_settings(smp_group *group, uint32_t timeout);
+
+    void size_abbreviation(uint32_t size, QString *output);
 
     smp_processor *processor;
 
@@ -210,6 +212,12 @@ private:
     mcumgr_action_t mode;
     bool smp_v2;
     uint16_t smp_mtu;
+
+    //OS management
+
+    //Image management
+    QList<image_state_t> *img_mgmt_get_state_images;
+    QList<slot_info_t> *img_mgmt_slot_info_images;
 
     const QString value_transport_uart = "uart";
     const QString value_transport_bluetooth = "bluetooth";

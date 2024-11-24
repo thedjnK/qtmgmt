@@ -26,6 +26,7 @@
 /******************************************************************************/
 #include "command_processor.h"
 #include <QDebug>
+#include <AuTerm/AuTerm/AutEscape.h>
 
 //UART
 const QCommandLineOption option_transport_uart_port("port", "UART port", "port");
@@ -144,6 +145,7 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
     mode = ACTION_IDLE;
     smp_v2 = true;
     smp_mtu = 256;
+    img_mgmt_get_state_images = nullptr;
 
     //Execute run function in event loop so that QCoreApplication::exit() works
     QTimer::singleShot(0, this, SLOT(run()));
@@ -160,6 +162,12 @@ command_processor::~command_processor()
 
         delete transport_uart;
         transport_uart = nullptr;
+    }
+
+    if (img_mgmt_get_state_images != nullptr)
+    {
+        delete img_mgmt_get_state_images;
+        img_mgmt_get_state_images = nullptr;
     }
 
     if (active_transport != nullptr)
@@ -604,18 +612,23 @@ void command_processor::run()
     }
     else if (user_group == value_group_enum)
     {
+        group_enum = new smp_group_enum_mgmt(processor);
+        active_group = group_enum;
 
+        connect(group_enum, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        connect(group_enum, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+        exit_code = run_group_enum(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_fs)
     {
-        group_enum;
-        group_fs;
-        group_img;
-        group_os;
-        group_settings;
-        group_shell;
-        group_stat;
-        group_zephyr;
+        group_fs = new smp_group_fs_mgmt(processor);
+        active_group = group_fs;
+
+        connect(group_fs, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        connect(group_fs, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+        exit_code = run_group_fs(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_os)
     {
@@ -629,19 +642,43 @@ void command_processor::run()
     }
     else if (user_group == value_group_settings)
     {
+        group_settings = new smp_group_settings_mgmt(processor);
+        active_group = group_settings;
 
+        connect(group_settings, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        connect(group_settings, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+        exit_code = run_group_settings(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_shell)
     {
+        group_shell = new smp_group_shell_mgmt(processor);
+        active_group = group_shell;
 
+        connect(group_shell, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        connect(group_shell, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+        exit_code = run_group_shell(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_stat)
     {
+        group_stat = new smp_group_stat_mgmt(processor);
+        active_group = group_stat;
 
+        connect(group_stat, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        connect(group_stat, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+        exit_code = run_group_stat(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_zephyr)
     {
+        group_zephyr = new smp_group_zephyr_mgmt(processor);
+        active_group = group_zephyr;
 
+        connect(group_zephyr, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        connect(group_zephyr, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+        exit_code = run_group_zephyr(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_img)
     {
@@ -1089,6 +1126,7 @@ void command_processor::add_group_options_img(QList<entry_t> *entries, QString c
     else if (command == value_command_img_set_state)
     {
         //hash, confirm
+//TODO: need to check if supplied parameters are valid
         entries->append({{&option_command_img_hash}, false, false});
         entries->append({{&option_command_img_confirm}, false, false});
     }
@@ -1109,15 +1147,17 @@ void command_processor::add_group_options_img(QList<entry_t> *entries, QString c
     }
 }
 
-#if 0
 int command_processor::run_group_enum(QCommandLineParser *parser, QString command)
 {
+    //TODO
+    return EXIT_CODE_SUCCESS;
 }
 
 int command_processor::run_group_fs(QCommandLineParser *parser, QString command)
 {
+    //TODO
+    return EXIT_CODE_SUCCESS;
 }
-#endif
 
 int command_processor::run_group_os(QCommandLineParser *parser, QString command)
 {
@@ -1175,29 +1215,39 @@ int command_processor::run_group_os(QCommandLineParser *parser, QString command)
     return EXIT_CODE_SUCCESS;
 }
 
-#if 0
 int command_processor::run_group_settings(QCommandLineParser *parser, QString command)
 {
+    //TODO
+    return EXIT_CODE_SUCCESS;
 }
 
 int command_processor::run_group_shell(QCommandLineParser *parser, QString command)
 {
+    //TODO
+    return EXIT_CODE_SUCCESS;
 }
 
 int command_processor::run_group_stat(QCommandLineParser *parser, QString command)
 {
+    //TODO
+    return EXIT_CODE_SUCCESS;
 }
 
 int command_processor::run_group_zephyr(QCommandLineParser *parser, QString command)
 {
+    //TODO
+    return EXIT_CODE_SUCCESS;
 }
-#endif
 
 int command_processor::run_group_img(QCommandLineParser *parser, QString command)
 {
     if (command == value_command_img_get_state)
     {
-        //TODO
+        mode = ACTION_IMG_IMAGE_LIST;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        img_mgmt_get_state_images = new QList<image_state_t>();
+        group_img->start_image_get(img_mgmt_get_state_images);
     }
     else if (command == value_command_img_set_state)
     {
@@ -1205,7 +1255,7 @@ int command_processor::run_group_img(QCommandLineParser *parser, QString command
 
         if (parser->isSet(option_command_img_hash))
         {
-            hash = parser->value(option_command_img_hash).toLatin1();
+            hash = QByteArray::fromHex(parser->value(option_command_img_hash).toLatin1());
         }
 
         mode = ACTION_IMG_IMAGE_SET;
@@ -1232,6 +1282,11 @@ int command_processor::run_group_img(QCommandLineParser *parser, QString command
     else if (command == value_command_img_slot_info)
     {
         //TODO
+        mode = ACTION_IMG_IMAGE_SLOT_INFO;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        img_mgmt_slot_info_images = new QList<slot_info_t>();
+        group_img->start_image_slot_info(img_mgmt_slot_info_images);
     }
 
     return EXIT_CODE_SUCCESS;
@@ -1314,14 +1369,65 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             }
             else if (user_data == ACTION_IMG_IMAGE_LIST)
             {
-#if 0
                 uint8_t i = 0;
-                while (i < images_list.length())
+                uint8_t l = (*img_mgmt_get_state_images).length();
+
+                while (i < l)
                 {
-                    model_image_state.appendRow(images_list[i].item);
+                    uint8_t c = 0;
+                    uint8_t m = (*img_mgmt_get_state_images)[i].slot_list.length();
+
+                    if ((*img_mgmt_get_state_images)[i].image_set == true)
+                    {
+                        fputs(qPrintable(tr("Image ") % QString::number((*img_mgmt_get_state_images)[i].image) % "\n"), stdout);
+                    }
+                    else
+                    {
+                        fputs(qPrintable(tr("Image (assumed ") % QString::number(i) % ")\n"), stdout);
+                    }
+
+                    while (c < m)
+                    {
+                        AutEscape::to_hex(&(*img_mgmt_get_state_images)[i].slot_list[c].hash);
+                        fputs(qPrintable(tr("\tSlot ") % QString::number((*img_mgmt_get_state_images)[i].slot_list[c].slot) % "\n"), stdout);
+                        fputs(qPrintable(tr("\t\tHash: ") % (*img_mgmt_get_state_images)[i].slot_list[c].hash % "\n"), stdout);
+                        fputs(qPrintable(tr("\t\tVersion: ") % (*img_mgmt_get_state_images)[i].slot_list[c].version % "\n"), stdout);
+
+                        if ((*img_mgmt_get_state_images)[i].slot_list[c].active == true)
+                        {
+                            fputs(qPrintable(tr("\t\t- Active") % "\n"), stdout);
+                        }
+
+                        if ((*img_mgmt_get_state_images)[i].slot_list[c].bootable == true)
+                        {
+                            fputs(qPrintable(tr("\t\t- Bootable") % "\n"), stdout);
+                        }
+
+                        if ((*img_mgmt_get_state_images)[i].slot_list[c].confirmed == true)
+                        {
+                            fputs(qPrintable(tr("\t\t- Confirmed") % "\n"), stdout);
+                        }
+
+                        if ((*img_mgmt_get_state_images)[i].slot_list[c].pending == true)
+                        {
+                            fputs(qPrintable(tr("\t\t- Pending") % "\n"), stdout);
+                        }
+
+                        if ((*img_mgmt_get_state_images)[i].slot_list[c].permanent == true)
+                        {
+                            fputs(qPrintable(tr("\t\t- Permanent") % "\n"), stdout);
+                        }
+
+                        if ((*img_mgmt_get_state_images)[i].slot_list[c].splitstatus == true)
+                        {
+                            fputs(qPrintable(tr("\t\t- Split image") % "\n"), stdout);
+                        }
+
+                        ++c;
+                    }
+
                     ++i;
                 }
-#endif
             }
             else if (user_data == ACTION_IMG_IMAGE_SET)
             {
@@ -1360,60 +1466,45 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             }
             else if (user_data == ACTION_IMG_IMAGE_SLOT_INFO)
             {
-#if 0
-                uint16_t i = 0;
+                uint8_t i = 0;
+                uint8_t l = (*img_mgmt_slot_info_images).length();
 
-                tree_IMG_Slot_Info->clear();
-
-                while (i < img_slot_details.length())
+                while (i < l)
                 {
-                    uint16_t l = 0;
-                    QStringList list_item_text;
-                    QTreeWidgetItem *row_image;
+                    uint8_t c = 0;
+                    uint8_t m = (*img_mgmt_slot_info_images)[i].slot_data.length();
                     QString field_size;
 
-                    list_item_text << QString("Image ").append(QString::number(img_slot_details.at(i).image));
+                    fputs(qPrintable(tr("Image ") % QString::number((*img_mgmt_slot_info_images)[i].image) % "\n"), stdout);
 
-                    if (img_slot_details.at(i).max_image_size_present == true)
+                    while (c < m)
                     {
-                        size_abbreviation(img_slot_details.at(i).max_image_size, &field_size);
-                        list_item_text << field_size;
-                    }
+                        fputs(qPrintable(tr("\tSlot ") % QString::number((*img_mgmt_slot_info_images)[i].slot_data[c].slot) % "\n"), stdout);
 
-                    row_image = new QTreeWidgetItem((QTreeWidget *)nullptr, list_item_text);
-
-                    while (l < img_slot_details.at(i).slot_data.length())
-                    {
-                        QTreeWidgetItem *row_slot;
-
-                        list_item_text.clear();
-                        list_item_text << QString("Slot ").append(QString::number(img_slot_details.at(i).slot_data.at(l).slot));
-
-                        if (img_slot_details.at(i).slot_data.at(l).size_present)
+                        if ((*img_mgmt_slot_info_images)[i].slot_data[c].size_present == true)
                         {
+                            size_abbreviation((*img_mgmt_slot_info_images)[i].slot_data[c].size, &field_size);
+                            fputs(qPrintable(tr("\t\tSize: ") % field_size % "\n"), stdout);
                             field_size.clear();
-                            size_abbreviation(img_slot_details.at(i).slot_data.at(l).size, &field_size);
-                            list_item_text << field_size;
                         }
 
-                        if (img_slot_details.at(i).slot_data.at(l).upload_image_id_present)
+                        if ((*img_mgmt_slot_info_images)[i].slot_data[c].upload_image_id_present == true)
                         {
-                            list_item_text << QString::number(img_slot_details.at(i).slot_data.at(l).upload_image_id);
+                            fputs(qPrintable(tr("\t\tUpload image ID: ") % QString::number((*img_mgmt_slot_info_images)[i].slot_data[c].upload_image_id) % "\n"), stdout);
                         }
 
-                        row_slot = new QTreeWidgetItem(row_image, list_item_text);
-
-                        ++l;
+                        ++c;
                     }
 
-                    tree_IMG_Slot_Info->addTopLevelItem(row_image);
+                    if ((*img_mgmt_slot_info_images)[i].max_image_size_present == true)
+                    {
+                        size_abbreviation((*img_mgmt_slot_info_images)[i].max_image_size, &field_size);
+                        fputs(qPrintable(tr("\tMax image size: ") % field_size % "\n"), stdout);
+                        field_size.clear();
+                    }
 
                     ++i;
                 }
-
-                //Expand all entries
-                tree_IMG_Slot_Info->expandAll();
-#endif
             }
         }
         else if (status == STATUS_UNSUPPORTED)
@@ -1447,6 +1538,17 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                 }
 #endif
             }
+        }
+
+        if (user_data == ACTION_IMG_IMAGE_SLOT_INFO)
+        {
+            delete img_mgmt_slot_info_images;
+            img_mgmt_slot_info_images = nullptr;
+        }
+        else if (user_data == ACTION_IMG_IMAGE_LIST)
+        {
+            delete img_mgmt_get_state_images;
+            img_mgmt_get_state_images = nullptr;
         }
     }
     else if (sender() == group_os)
@@ -1949,6 +2051,21 @@ void command_processor::transport_connected()
 
 void command_processor::transport_disconnected()
 {
+}
+
+void command_processor::size_abbreviation(uint32_t size, QString *output)
+{
+    const QStringList list_abbreviations = { "B", "KiB", "MiB", "GiB", "TiB" };
+    float converted_size = size;
+    uint8_t abbreviation_index = 0;
+
+    while (converted_size >= 1024 && abbreviation_index < list_abbreviations.size())
+    {
+        converted_size /= 1024.0;
+        ++abbreviation_index;
+    }
+
+    output->append(QString::number(converted_size, 'g', 3).append(list_abbreviations.at(abbreviation_index)));
 }
 
 /******************************************************************************/
