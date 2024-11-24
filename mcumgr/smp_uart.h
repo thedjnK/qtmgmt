@@ -96,6 +96,7 @@ public:
     int set_connection_config(struct smp_uart_config_t *configuration);
     smp_transport_error_t send(smp_message *message) override;
     uint16_t max_message_data_size(uint16_t mtu) override;
+    QString to_error_string(int error_code) override;
 
 private:
     void data_received(QByteArray *message);

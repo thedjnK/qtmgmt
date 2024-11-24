@@ -362,6 +362,12 @@ void smp_uart::serial_error(QSerialPort::SerialPortError error)
     }
 
     log_error() << "Serial port error: " << error;
+    emit smp_transport::error(error);
+
+    if (serial_port.isOpen())
+    {
+        serial_port.close();
+    }
 }
 
 int smp_uart::set_connection_config(struct smp_uart_config_t *configuration)
@@ -380,4 +386,59 @@ int smp_uart::set_connection_config(struct smp_uart_config_t *configuration)
     serial_config_set = true;
 
     return SMP_TRANSPORT_ERROR_OK;
+}
+
+QString smp_uart::to_error_string(int error_code)
+{
+    switch (error_code)
+    {
+        case QSerialPort::NoError:
+        {
+            return "No error";
+        }
+        case QSerialPort::DeviceNotFoundError:
+        {
+            return "Device no found";
+        }
+        case QSerialPort::PermissionError:
+        {
+            return "Permission error";
+        }
+        case QSerialPort::OpenError:
+        {
+            return "Open error";
+        }
+        case QSerialPort::WriteError:
+        {
+            return "Write error";
+        }
+        case QSerialPort::ReadError:
+        {
+            return "Read error";
+        }
+        case QSerialPort::ResourceError:
+        {
+            return "Resource error";
+        }
+        case QSerialPort::UnsupportedOperationError:
+        {
+            return "Unsupported operation error";
+        }
+        case QSerialPort::UnknownError:
+        {
+            return "Unknown error";
+        }
+        case QSerialPort::TimeoutError:
+        {
+            return "Timeout error";
+        }
+        case QSerialPort::NotOpenError:
+        {
+            return "Device not open";
+        }
+        default:
+        {
+            return "Unhandled error code";
+        }
+    };
 }
