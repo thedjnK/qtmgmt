@@ -25,6 +25,7 @@ HEADERS += \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group_enum_mgmt.h \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group_fs_mgmt.h \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group_os_mgmt.h \
+    ../mcumgr/AuTerm/plugins/mcumgr/smp_group_img_mgmt.h \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group_settings_mgmt.h \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group_shell_mgmt.h \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group_stat_mgmt.h \
@@ -34,10 +35,10 @@ HEADERS += \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_transport.h \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group.h \
     ../mcumgr/smp_uart.h \
-    command_processor.h
+    command_processor.h \
+    qtmgmt.h
 
 #    ../mcumgr/AuTerm/plugins/mcumgr/smp_json.h \
-#    ../mcumgr/AuTerm/plugins/mcumgr/smp_group_img_mgmt.h \
 
 TRANSLATIONS += \
     qtmgmt_en_GB.ts

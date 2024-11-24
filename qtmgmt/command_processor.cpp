@@ -253,7 +253,7 @@ void command_processor::run()
 
     if (parser.isSet(option_version))
     {
-        parser.showVersion();
+        fputs(qPrintable(QCoreApplication::applicationName() % tr(" version ") % QCoreApplication::applicationVersion() % "\n"), stdout);
         QCoreApplication::exit(EXIT_CODE_SUCCESS);
         return;
     }

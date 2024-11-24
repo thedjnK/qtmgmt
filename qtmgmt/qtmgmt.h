@@ -3,7 +3,7 @@
 **
 ** Project: qtmgmt
 **
-** Module:  main.cpp
+** Module:  qtmgmt.h
 **
 ** Notes:
 **
@@ -20,44 +20,20 @@
 **          along with this program.  If not, see http://www.gnu.org/licenses/
 **
 *******************************************************************************/
+#ifndef QTMGMT_H
+#define QTMGMT_H
 
 /******************************************************************************/
 // Include Files
 /******************************************************************************/
-#include <QCoreApplication>
-#include <QLocale>
-#include <QTranslator>
-#include "command_processor.h"
-#include "qtmgmt.h"
+#include <QString>
 
 /******************************************************************************/
-// Global Functions or Non Class Members
+// Constants
 /******************************************************************************/
-int main(int argc, char *argv[])
-{
-    QCoreApplication a(argc, argv);
-    command_processor *app_processor = new command_processor(a.instance());
-    int exit_code;
+static const QString qtmgmt_version = "0.01"; //Version string
 
-    QTranslator translator;
-    const QStringList uiLanguages = QLocale::system().uiLanguages();
-    for (const QString &locale : uiLanguages) {
-        const QString baseName = "qtmgmt_" + QLocale(locale).name();
-        if (translator.load(":/i18n/" + baseName)) {
-            a.installTranslator(&translator);
-            break;
-        }
-    }
-
-    QCoreApplication::setApplicationName("qtmgmt");
-    QCoreApplication::setApplicationVersion(qtmgmt_version);
-
-    //Run command processor function until exit
-    exit_code = a.exec();
-    delete app_processor;
-    app_processor = nullptr;
-    return exit_code;
-}
+#endif // QTMGMT_H
 
 /******************************************************************************/
 // END OF FILE
