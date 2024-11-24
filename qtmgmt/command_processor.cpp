@@ -131,8 +131,14 @@ const QCommandLineOption option_smp_v2("smp-v2", "Use SMP version 2 (default)");
 command_processor::command_processor(QObject *parent) : QObject{parent}
 {
     processor = nullptr;
-    group_os = nullptr;
+    group_enum = nullptr;
+    group_fs = nullptr;
     group_img = nullptr;
+    group_os = nullptr;
+    group_settings = nullptr;
+    group_shell = nullptr;
+    group_stat = nullptr;
+    group_zephyr = nullptr;
     transport_uart = nullptr;
     active_transport = nullptr;
     mode = ACTION_IDLE;
@@ -167,16 +173,52 @@ command_processor::~command_processor()
         processor = nullptr;
     }
 
-    if (group_os != nullptr)
+    if (group_enum != nullptr)
     {
-        delete group_os;
-        group_os = nullptr;
+        delete group_enum;
+        group_enum = nullptr;
+    }
+
+    if (group_fs != nullptr)
+    {
+        delete group_fs;
+        group_fs = nullptr;
     }
 
     if (group_img != nullptr)
     {
         delete group_img;
         group_img = nullptr;
+    }
+
+    if (group_os != nullptr)
+    {
+        delete group_os;
+        group_os = nullptr;
+    }
+
+    if (group_settings != nullptr)
+    {
+        delete group_settings;
+        group_settings = nullptr;
+    }
+
+    if (group_shell != nullptr)
+    {
+        delete group_shell;
+        group_shell = nullptr;
+    }
+
+    if (group_stat != nullptr)
+    {
+        delete group_stat;
+        group_stat = nullptr;
+    }
+
+    if (group_zephyr != nullptr)
+    {
+        delete group_zephyr;
+        group_zephyr = nullptr;
     }
 }
 
@@ -566,7 +608,14 @@ void command_processor::run()
     }
     else if (user_group == value_group_fs)
     {
-
+        group_enum;
+        group_fs;
+        group_img;
+        group_os;
+        group_settings;
+        group_shell;
+        group_stat;
+        group_zephyr;
     }
     else if (user_group == value_group_os)
     {
@@ -1217,7 +1266,6 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
 //    log_debug() << "Status: " << status;
 
-#if 0
     if (sender() == group_img)
     {
         log_debug() << "img sender";
@@ -1230,7 +1278,7 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             if (user_data == ACTION_IMG_UPLOAD)
             {
                 log_debug() << "is upload";
-
+#if 0
                 if (radio_IMG_Test->isChecked() || radio_IMG_Confirm->isChecked())
                 {
                     //Mark image for test or confirmation
@@ -1244,9 +1292,11 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
                     log_debug() << "do upload of " << upload_hash;
                 }
+#endif
             }
             else if (user_data == ACTION_IMG_UPLOAD_SET)
             {
+#if 0
                 if (check_IMG_Reset->isChecked())
                 {
                     //Reboot device
@@ -1260,18 +1310,22 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
                     log_debug() << "do reset";
                 }
+#endif
             }
             else if (user_data == ACTION_IMG_IMAGE_LIST)
             {
+#if 0
                 uint8_t i = 0;
                 while (i < images_list.length())
                 {
                     model_image_state.appendRow(images_list[i].item);
                     ++i;
                 }
+#endif
             }
             else if (user_data == ACTION_IMG_IMAGE_SET)
             {
+#if 0
                 if (parent_row != -1 && parent_column != -1 && child_row != -1 && child_column != -1)
                 {
                     uint8_t i = 0;
@@ -1302,9 +1356,11 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                 {
                     colview_IMG_Images->previewWidget()->hide();
                 }
+#endif
             }
             else if (user_data == ACTION_IMG_IMAGE_SLOT_INFO)
             {
+#if 0
                 uint16_t i = 0;
 
                 tree_IMG_Slot_Info->clear();
@@ -1357,6 +1413,7 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
                 //Expand all entries
                 tree_IMG_Slot_Info->expandAll();
+#endif
             }
         }
         else if (status == STATUS_UNSUPPORTED)
@@ -1366,6 +1423,7 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             //Advance to next stage of image upload, this is likely to occur in MCUboot serial recovery whereby the image state functionality is not included
             if (user_data == ACTION_IMG_UPLOAD_SET)
             {
+#if 0
                 skip_error_string = true;
 
                 if (check_IMG_Reset->isChecked())
@@ -1387,12 +1445,11 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                 {
                     lbl_IMG_Status->setText("Upload finished, set image state failed: command not supported (likely MCUboot serial recovery)");
                 }
+#endif
             }
         }
     }
     else if (sender() == group_os)
-#endif
-if (sender() == group_os)
     {
         log_debug() << "os sender";
 //        label_status = lbl_OS_Status;

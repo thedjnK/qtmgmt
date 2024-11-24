@@ -29,8 +29,14 @@
 #include <QObject>
 #include <QTimer>
 #include <QCommandLineParser>
-#include <smp_group_os_mgmt.h>
+#include <smp_group_enum_mgmt.h>
+#include <smp_group_fs_mgmt.h>
 #include <smp_group_img_mgmt.h>
+#include <smp_group_os_mgmt.h>
+#include <smp_group_settings_mgmt.h>
+#include <smp_group_shell_mgmt.h>
+#include <smp_group_stat_mgmt.h>
+#include <smp_group_zephyr_mgmt.h>
 #include <smp_processor.h>
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
 #include <smp_uart.h>
@@ -176,8 +182,16 @@ private:
     void set_group_transport_settings(smp_group *group, uint32_t timeout);
 
     smp_processor *processor;
-    smp_group_os_mgmt *group_os;
+
+    smp_group_enum_mgmt *group_enum;
+    smp_group_fs_mgmt *group_fs;
     smp_group_img_mgmt *group_img;
+    smp_group_os_mgmt *group_os;
+    smp_group_settings_mgmt *group_settings;
+    smp_group_shell_mgmt *group_shell;
+    smp_group_stat_mgmt *group_stat;
+    smp_group_zephyr_mgmt *group_zephyr;
+
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
     smp_uart *transport_uart;
 #endif
