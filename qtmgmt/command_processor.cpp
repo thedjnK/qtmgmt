@@ -298,7 +298,15 @@ void command_processor::run()
 
     while (i < l)
     {
-        parser.addOption(*entries[i].option);
+        uint8_t c = 0;
+        uint8_t m = entries[i].option.length();
+
+        while (c < m)
+        {
+            parser.addOption(*entries[i].option[c]);
+            ++c;
+        }
+
         ++i;
     }
 
@@ -325,13 +333,76 @@ void command_processor::run()
 
     while (i < l)
     {
-        if (entries[i].required == true && parser.isSet(*entries[i].option) == false)
+        if (entries[i].required == true || entries[i].exclusive == true)
         {
-            fputs(qPrintable(tr("Missing required argument: ") % "--" % entries[i].option->names().join(" or --") % "\n"), stdout);
-            failed = true;
+            bool option_present = false;
+            bool exclusivity_breached = false;
+            uint8_t c = 0;
+            uint8_t m = entries[i].option.length();
+
+            while (c < m)
+            {
+                if (parser.isSet(*entries[i].option[c]) == true)
+                {
+                    if (entries[i].exclusive == true && option_present == true)
+                    {
+                        //We already have an exclusive option so this configuration is not allowed
+                        exclusivity_breached = true;
+                        break;
+                    }
+
+                    option_present = true;
+                }
+
+                ++c;
+            }
+
+            if (entries[i].required == true && option_present == false)
+            {
+                //Required option not present, output error with list of options
+                QString required_options;
+
+                c = 0;
+                m = entries[i].option.length();
+
+                while (c < m)
+                {
+                    required_options.append(entries[i].option[c]->names().join(" or --"));
+                    ++c;
+
+                    if (c < m)
+                    {
+                        required_options.append(" or --");
+                    }
+                }
+
+                fputs(qPrintable(tr("Missing required argument: ") % "--" % required_options % "\n"), stdout);
+                failed = true;
+            }
+            else if (exclusivity_breached == true)
+            {
+                //Multiple exclusive options used, output error with details
+                QString conflicting_options;
+
+                c = 0;
+                m = entries[i].option.length();
+
+                while (c < m)
+                {
+                    if (parser.isSet(*entries[i].option[c]))
+                    {
+                        conflicting_options.append(entries[i].option[c]->names().join(" and --")).append(" and --");
+                    }
+
+                    ++c;
+                }
+
+                conflicting_options.remove((conflicting_options.length() - 7), 7);
+                fputs(qPrintable(tr("Conflicting exclusive arguments: ") % "--" % conflicting_options % "\n"), stdout);
+                failed = true;
+            }
         }
 
-//TODO: exclusive
         ++i;
     }
 
@@ -484,12 +555,12 @@ void command_processor::run()
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
 void command_processor::add_transport_options_uart(QList<entry_t> *entries)
 {
-    entries->append({&option_transport_uart_port, true, false, nullptr});
-    entries->append({&option_transport_uart_baud, false, false, nullptr});
-    entries->append({&option_transport_uart_flow_control, false, false, nullptr});
-    entries->append({&option_transport_uart_parity, false, false, nullptr});
-    entries->append({&option_transport_uart_data_bits, false, false, nullptr});
-    entries->append({&option_transport_uart_stop_bits, false, false, nullptr});
+    entries->append({{&option_transport_uart_port}, true, false});
+    entries->append({{&option_transport_uart_baud}, false, false});
+    entries->append({{&option_transport_uart_flow_control}, false, false});
+    entries->append({{&option_transport_uart_parity}, false, false});
+    entries->append({{&option_transport_uart_data_bits}, false, false});
+    entries->append({{&option_transport_uart_stop_bits}, false, false});
 }
 
 int command_processor::configure_transport_options_uart(smp_uart *transport, QCommandLineParser *parser)
@@ -631,8 +702,8 @@ int command_processor::configure_transport_options_uart(smp_uart *transport, QCo
 void command_processor::add_transport_options_bluetooth(QList<entry_t> *entries)
 {
     //TODO: make exclusive
-    entries->append({&option_transport_bluetooth_name, false, false, nullptr});
-    entries->append({&option_transport_bluetooth_address, false, false, nullptr});
+    entries->append({{&option_transport_bluetooth_name}, false, false});
+    entries->append({{&option_transport_bluetooth_address}, false, false});
 }
 
 int command_processor::configure_transport_options_bluetooth(smp_bluetooth *transport, QCommandLineParser *parser)
@@ -659,8 +730,8 @@ int command_processor::configure_transport_options_bluetooth(smp_bluetooth *tran
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
 void command_processor::add_transport_options_udp(QList<entry_t> *entries)
 {
-    entries->append({&option_transport_udp_host, true, false, nullptr});
-    entries->append({&option_transport_udp_port, false, false, nullptr});
+    entries->append({{&option_transport_udp_host}, true, false});
+    entries->append({{&option_transport_udp_port}, false, false});
 }
 
 int command_processor::configure_transport_options_udp(smp_udp *transport, QCommandLineParser *parser)
@@ -694,14 +765,13 @@ int command_processor::configure_transport_options_udp(smp_udp *transport, QComm
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
 void command_processor::add_transport_options_lorawan(QList<entry_t> *entries)
 {
-    entries->append({&option_transport_lorawan_host, true, false, nullptr});
-    entries->append({&option_transport_lorawan_port, false, false, nullptr});
-    entries->append({&option_transport_lorawan_tls, false, false, nullptr});
-    entries->append({&option_transport_lorawan_no_tls, false, false, nullptr});
-    entries->append({&option_transport_lorawan_username, true, false, nullptr});
-    entries->append({&option_transport_lorawan_password, true, false, nullptr});
-    entries->append({&option_transport_lorawan_topic, true, false, nullptr});
-    entries->append({&option_transport_lorawan_frame_port, true, false, nullptr});
+    entries->append({{&option_transport_lorawan_host}, true, false});
+    entries->append({{&option_transport_lorawan_port}, false, false});
+    entries->append({{&option_transport_lorawan_tls, &option_transport_lorawan_no_tls}, false, true});
+    entries->append({{&option_transport_lorawan_username}, true, false});
+    entries->append({{&option_transport_lorawan_password}, true, false});
+    entries->append({{&option_transport_lorawan_topic}, true, false});
+    entries->append({{&option_transport_lorawan_frame_port}, true, false});
 }
 
 int command_processor::configure_transport_options_lorawan(smp_lorawan *transport, QCommandLineParser *parser)
@@ -779,12 +849,12 @@ void command_processor::add_group_options_enum(QList<entry_t> *entries, QString 
     else if (command == value_command_enum_single)
     {
         //index
-        entries->append({&option_command_enum_index, true, false, nullptr});
+        entries->append({{&option_command_enum_index}, true, false});
     }
     else if (command == value_command_enum_details)
     {
         //groups (array)
-        entries->append({&option_command_enum_groups, true, false, nullptr});
+        entries->append({{&option_command_enum_groups}, true, false});
     }
 }
 
@@ -798,19 +868,19 @@ void command_processor::add_group_options_fs(QList<entry_t> *entries, QString co
     if (command == value_command_fs_upload || command == value_command_fs_download)
     {
         //local file, remote file
-        entries->append({&option_command_fs_local_file, true, false, nullptr});
-        entries->append({&option_command_fs_remote_file, true, false, nullptr});
+        entries->append({{&option_command_fs_local_file}, true, false});
+        entries->append({{&option_command_fs_remote_file}, true, false});
     }
     else if (command == value_command_fs_status)
     {
         //remote file
-        entries->append({&option_command_fs_remote_file, true, false, nullptr});
+        entries->append({{&option_command_fs_remote_file}, true, false});
     }
     else if (value_command_fs_hash_checksum.contains(command))
     {
         //remote file, hash/checksum
-        entries->append({&option_command_fs_remote_file, true, false, nullptr});
-        entries->append({&option_command_fs_hash_checksum, true, false, nullptr});
+        entries->append({{&option_command_fs_remote_file}, true, false});
+        entries->append({{&option_command_fs_hash_checksum}, true, false});
     }
     else if (value_command_fs_supported_hashes_checksums.contains(command))
     {
@@ -830,7 +900,7 @@ void command_processor::add_group_options_os(QList<entry_t> *entries, QString co
     if (command == value_command_os_echo)
     {
         //data
-        entries->append({&option_command_os_data, true, false, nullptr});
+        entries->append({{&option_command_os_data}, true, false});
     }
     else if (command == value_command_os_tasks)
     {
@@ -841,7 +911,7 @@ void command_processor::add_group_options_os(QList<entry_t> *entries, QString co
     else if (command == value_command_os_reset)
     {
         //force
-        entries->append({&option_command_os_force, false, false, nullptr});
+        entries->append({{&option_command_os_force}, false, false});
     }
     else if (command == value_command_os_mcumgr_parameters)
     {
@@ -849,7 +919,7 @@ void command_processor::add_group_options_os(QList<entry_t> *entries, QString co
     else if (command == value_command_os_application_info)
     {
         //format
-        entries->append({&option_command_os_format, false, false, nullptr});
+        entries->append({{&option_command_os_format}, false, false});
     }
     else if (command == value_command_os_get_date_time)
     {
@@ -857,12 +927,12 @@ void command_processor::add_group_options_os(QList<entry_t> *entries, QString co
     else if (command == value_command_os_set_date_time)
     {
         //datetime
-        entries->append({&option_command_os_datetime, true, false, nullptr});
+        entries->append({{&option_command_os_datetime}, true, false});
     }
     else if (command == value_command_os_bootloader_info)
     {
         //query
-        entries->append({&option_command_os_query, false, false, nullptr});
+        entries->append({{&option_command_os_query}, false, false});
     }
 }
 

@@ -131,10 +131,9 @@ signals:
 
 private:
     struct entry_t {
-        const QCommandLineOption *option;
+        QList<const QCommandLineOption *> option;
         bool required;
         bool exclusive;
-        const QCommandLineOption *exclusive_option;
     };
 
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
