@@ -115,6 +115,14 @@ enum exit_code_t {
     EXIT_CODE_TRANSPORT_OPEN_FAILED = -8,
 };
 
+enum image_upload_mode_t {
+    IMAGE_UPLOAD_MODE_NORMAL,
+    IMAGE_UPLOAD_MODE_TEST,
+    IMAGE_UPLOAD_MODE_CONFIRM,
+
+    IMAGE_UPLOAD_MODE_COUNT
+};
+
 /******************************************************************************/
 // Class definitions
 /******************************************************************************/
@@ -218,6 +226,9 @@ private:
     //Image management
     QList<image_state_t> *img_mgmt_get_state_images;
     QList<slot_info_t> *img_mgmt_slot_info_images;
+    enum image_upload_mode_t upload_mode;
+    QByteArray upload_hash;
+    bool upload_reset;
 
     const QString value_transport_uart = "uart";
     const QString value_transport_bluetooth = "bluetooth";

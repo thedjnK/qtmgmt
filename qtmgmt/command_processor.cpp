@@ -115,7 +115,9 @@ const QCommandLineOption option_command_os_query("query", "Query string", "query
 
 //Image management group
 const QCommandLineOption option_command_img_hash("hash", "Hash of image", "hash");
-const QCommandLineOption option_command_img_confirm("confirm", "Mark as confirmed instead of test");
+const QCommandLineOption option_command_img_test("test", "Mark image as test");
+const QCommandLineOption option_command_img_confirm("confirm", "Mark image as confirmed");
+const QCommandLineOption option_command_img_reset("reset", "Reset after update");
 const QCommandLineOption option_command_img_image("image", "Image number", "image");
 const QCommandLineOption option_command_img_file("file", "Firmware update", "file");
 const QCommandLineOption option_command_img_upgrade("upgrade", "Only accept upgrades");
@@ -1132,10 +1134,12 @@ void command_processor::add_group_options_img(QList<entry_t> *entries, QString c
     }
     else if (command == value_command_img_upload)
     {
-        //image, file, upgrade
+        //image, file, upgrade, test/confirm, reset
         entries->append({{&option_command_img_image}, false, false});
         entries->append({{&option_command_img_file}, true, false});
         entries->append({{&option_command_img_upgrade}, false, false});
+        entries->append({{&option_command_img_test, &option_command_img_confirm}, false, true});
+        entries->append({{&option_command_img_reset}, false, false});
     }
     else if (command == value_command_img_erase)
     {
@@ -1265,12 +1269,12 @@ int command_processor::run_group_img(QCommandLineParser *parser, QString command
     }
     else if (command == value_command_img_upload)
     {
-        QByteArray hash;
-
         mode = ACTION_IMG_UPLOAD;
         processor->set_transport(active_transport);
         set_group_transport_settings(active_group);
-        group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &hash);
+        upload_mode = (parser->isSet(option_command_img_test) == true ? IMAGE_UPLOAD_MODE_TEST : (parser->isSet(option_command_img_confirm) == true ? IMAGE_UPLOAD_MODE_CONFIRM : IMAGE_UPLOAD_MODE_NORMAL));
+        upload_reset = parser->isSet(option_command_img_reset);
+        group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &upload_hash);
     }
     else if (command == value_command_img_erase)
     {
@@ -1333,41 +1337,51 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             if (user_data == ACTION_IMG_UPLOAD)
             {
                 log_debug() << "is upload";
-#if 0
-                if (radio_IMG_Test->isChecked() || radio_IMG_Confirm->isChecked())
+                if (upload_mode == IMAGE_UPLOAD_MODE_TEST || upload_mode == IMAGE_UPLOAD_MODE_CONFIRM)
                 {
                     //Mark image for test or confirmation
                     finished = false;
 
                     mode = ACTION_IMG_UPLOAD_SET;
-                    processor->set_transport(active_transport());
-                    set_group_transport_settings(smp_groups.img_mgmt);
-                    bool started = smp_groups.img_mgmt->start_image_set(&upload_hash, (radio_IMG_Confirm->isChecked() ? true : false), nullptr);
+                    processor->set_transport(active_transport);
+                    set_group_transport_settings(group_img);
+                    bool started = group_img->start_image_set(&upload_hash, (upload_mode == IMAGE_UPLOAD_MODE_CONFIRM ? true : false), nullptr);
                     //todo: check status
 
                     log_debug() << "do upload of " << upload_hash;
                 }
-#endif
             }
             else if (user_data == ACTION_IMG_UPLOAD_SET)
             {
-#if 0
-                if (check_IMG_Reset->isChecked())
+                if (upload_reset == true)
                 {
                     //Reboot device
                     finished = false;
 
+                    //Clean up of previous group
+                    disconnect(active_group, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+                    disconnect(active_group, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+                    delete active_group;
+                    active_group = nullptr;
+
+                    //Set up OS management group
+                    group_os = new smp_group_os_mgmt(processor);
+                    active_group = group_os;
+
+                    connect(group_os, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+                    connect(group_os, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
                     mode = ACTION_OS_UPLOAD_RESET;
-                    processor->set_transport(active_transport());
-                    set_group_transport_settings(smp_groups.os_mgmt);
-                    bool started = smp_groups.os_mgmt->start_reset(false);
+                    processor->set_transport(active_transport);
+                    set_group_transport_settings(group_os);
+
+                    bool started = group_os->start_reset(false);
                     //todo: check status
 
                     log_debug() << "do reset";
                 }
-#endif
             }
-            else if (user_data == ACTION_IMG_IMAGE_LIST)
+            else if (user_data == ACTION_IMG_IMAGE_LIST || user_data == ACTION_IMG_IMAGE_SET)
             {
                 uint8_t i = 0;
                 uint8_t l = (*img_mgmt_get_state_images).length();
@@ -1429,41 +1443,6 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                     ++i;
                 }
             }
-            else if (user_data == ACTION_IMG_IMAGE_SET)
-            {
-#if 0
-                if (parent_row != -1 && parent_column != -1 && child_row != -1 && child_column != -1)
-                {
-                    uint8_t i = 0;
-
-                    model_image_state.clear();
-
-                    while (i < images_list.length())
-                    {
-                        model_image_state.appendRow(images_list[i].item);
-                        ++i;
-                    }
-
-                    if (model_image_state.hasIndex(parent_row, parent_column) == true && model_image_state.index(child_row, child_column, model_image_state.index(parent_row, parent_column)).isValid() == true)
-                    {
-                        colview_IMG_Images->setCurrentIndex(model_image_state.index(child_row, child_column, model_image_state.index(parent_row, parent_column)));
-                    }
-                    else
-                    {
-                        colview_IMG_Images->previewWidget()->hide();
-                    }
-
-                    parent_row = -1;
-                    parent_column = -1;
-                    child_row = -1;
-                    child_column = -1;
-                }
-                else
-                {
-                    colview_IMG_Images->previewWidget()->hide();
-                }
-#endif
-            }
             else if (user_data == ACTION_IMG_IMAGE_SLOT_INFO)
             {
                 uint8_t i = 0;
@@ -1514,29 +1493,39 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             //Advance to next stage of image upload, this is likely to occur in MCUboot serial recovery whereby the image state functionality is not included
             if (user_data == ACTION_IMG_UPLOAD_SET)
             {
-#if 0
                 skip_error_string = true;
 
-                if (check_IMG_Reset->isChecked())
+                if (upload_reset == true)
                 {
                     //Reboot device
                     finished = false;
 
+                    //Clean up of previous group
+                    disconnect(active_group, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+                    disconnect(active_group, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+                    delete active_group;
+                    active_group = nullptr;
+
+                    //Set up OS management group
+                    group_os = new smp_group_os_mgmt(processor);
+                    active_group = group_os;
+
+                    connect(group_os, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+                    connect(group_os, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
                     mode = ACTION_OS_UPLOAD_RESET;
-                    processor->set_transport(active_transport());
-                    set_group_transport_settings(smp_groups.os_mgmt);
-                    bool started = smp_groups.os_mgmt->start_reset(false);
+                    processor->set_transport(active_transport);
+                    set_group_transport_settings(group_os);
+
+                    bool started = group_os->start_reset(false);
                     //todo: check status
 
                     log_debug() << "do reset";
-
-                    lbl_IMG_Status->setText("Resetting...");
                 }
                 else
                 {
-                    lbl_IMG_Status->setText("Upload finished, set image state failed: command not supported (likely MCUboot serial recovery)");
+                    log_information() << "Upload finished, set image state failed: command not supported (likely MCUboot serial recovery)";
                 }
-#endif
             }
         }
 
