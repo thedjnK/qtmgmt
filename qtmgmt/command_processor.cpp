@@ -85,6 +85,12 @@ const QString value_command_os_get_date_time = "get-date-time";
 const QString value_command_os_set_date_time = "set-date-time";
 const QString value_command_os_bootloader_info = "bootloader-info";
 
+const QString value_command_img_get_state = "get-state";
+const QString value_command_img_set_state = "set-state";
+const QString value_command_img_upload = "upload";
+const QString value_command_img_erase = "erase";
+const QString value_command_img_slot_info = "slot-info";
+
 //const QString value_command_settings_ = "";
 //const QString value_command_shell_ = "";
 //const QString value_command_stat_ = "";
@@ -106,6 +112,14 @@ const QCommandLineOption option_command_os_format("format", "Info format string"
 const QCommandLineOption option_command_os_datetime("datetime", "Date and time", "TODO");
 const QCommandLineOption option_command_os_query("query", "Query string", "query");
 
+//Image management group
+const QCommandLineOption option_command_img_hash("hash", "Hash of image", "hash");
+const QCommandLineOption option_command_img_confirm("confirm", "Mark as confirmed instead of test");
+const QCommandLineOption option_command_img_image("image", "Image number", "image");
+const QCommandLineOption option_command_img_file("file", "Firmware update", "file");
+const QCommandLineOption option_command_img_upgrade("upgrade", "Only accept upgrades");
+const QCommandLineOption option_command_img_slot("slot", "Slot number", "slot");
+
 /******************************************************************************/
 // Local Functions or Private Members
 /******************************************************************************/
@@ -113,6 +127,7 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
 {
     processor = nullptr;
     group_os = nullptr;
+    group_img = nullptr;
     transport_uart = nullptr;
     active_transport = nullptr;
     mode = ACTION_IDLE;
@@ -153,6 +168,12 @@ command_processor::~command_processor()
     {
         delete group_os;
         group_os = nullptr;
+    }
+
+    if (group_img != nullptr)
+    {
+        delete group_img;
+        group_img = nullptr;
     }
 }
 
@@ -412,6 +433,8 @@ void command_processor::run()
         return;
     }
 
+//TODO: Check that options supplied for each transport/group are valid
+
     //Set up and open transport
     if (0)
     {
@@ -543,7 +566,13 @@ void command_processor::run()
     }
     else if (user_group == value_group_img)
     {
+        group_img = new smp_group_img_mgmt(processor);
+        active_group = group_img;
 
+        connect(group_img, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        connect(group_img, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+        exit_code = run_group_img(&parser, parser.value(option_command));
     }
 
     if (exit_code != EXIT_CODE_SUCCESS)
@@ -974,6 +1003,31 @@ void command_processor::add_group_options_img(QList<entry_t> *entries, QString c
     {
         return;
     }
+
+    if (command == value_command_img_get_state)
+    {
+    }
+    else if (command == value_command_img_set_state)
+    {
+        //hash, confirm
+        entries->append({{&option_command_img_hash}, false, false});
+        entries->append({{&option_command_img_confirm}, false, false});
+    }
+    else if (command == value_command_img_upload)
+    {
+        //image, file, upgrade
+        entries->append({{&option_command_img_image}, false, false});
+        entries->append({{&option_command_img_file}, true, false});
+        entries->append({{&option_command_img_upgrade}, false, false});
+    }
+    else if (command == value_command_img_erase)
+    {
+        //slot
+        entries->append({{&option_command_img_slot}, true, false});
+    }
+    else if (command == value_command_img_slot_info)
+    {
+    }
 }
 
 #if 0
@@ -998,33 +1052,43 @@ int command_processor::run_group_os(QCommandLineParser *parser, QString command)
     }
     else if (command == value_command_os_tasks)
     {
+        //TODO
     }
     else if (command == value_command_os_memory)
     {
+        //TODO
     }
     else if (command == value_command_os_reset)
     {
         //force
-        //option_command_os_force
+        mode = ACTION_OS_RESET;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_os->start_reset(parser->isSet(option_command_os_force));
     }
     else if (command == value_command_os_mcumgr_parameters)
     {
+        //TODO
     }
     else if (command == value_command_os_application_info)
     {
+        //TODO
         //format
         //option_command_os_format
     }
     else if (command == value_command_os_get_date_time)
     {
+        //TODO
     }
     else if (command == value_command_os_set_date_time)
     {
+        //TODO
         //datetime
         //option_command_os_datetime
     }
     else if (command == value_command_os_bootloader_info)
     {
+        //TODO
         //query
         //option_command_os_query
     }
@@ -1048,11 +1112,51 @@ int command_processor::run_group_stat(QCommandLineParser *parser, QString comman
 int command_processor::run_group_zephyr(QCommandLineParser *parser, QString command)
 {
 }
+#endif
 
 int command_processor::run_group_img(QCommandLineParser *parser, QString command)
 {
+    if (command == value_command_img_get_state)
+    {
+        //TODO
+    }
+    else if (command == value_command_img_set_state)
+    {
+        QByteArray hash;
+
+        if (parser->isSet(option_command_img_hash))
+        {
+            hash = parser->value(option_command_img_hash).toLatin1();
+        }
+
+        mode = ACTION_IMG_IMAGE_SET;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_img->start_image_set((parser->isSet(option_command_img_hash) ? &hash : nullptr), (parser->isSet(option_command_img_confirm) ? true : false), nullptr);
+    }
+    else if (command == value_command_img_upload)
+    {
+        QByteArray hash;
+
+        mode = ACTION_IMG_UPLOAD;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &hash);
+    }
+    else if (command == value_command_img_erase)
+    {
+        mode = ACTION_IMG_IMAGE_ERASE;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_img->start_image_erase(parser->value(option_command_img_slot).toUInt());
+    }
+    else if (command == value_command_img_slot_info)
+    {
+        //TODO
+    }
+
+    return EXIT_CODE_SUCCESS;
 }
-#endif
 
 void command_processor::set_group_transport_settings(smp_group *group)
 {

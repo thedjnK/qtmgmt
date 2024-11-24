@@ -30,6 +30,7 @@
 #include <QTimer>
 #include <QCommandLineParser>
 #include <smp_group_os_mgmt.h>
+#include <smp_group_img_mgmt.h>
 #include <smp_processor.h>
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
 #include <smp_uart.h>
@@ -169,13 +170,14 @@ private:
     //int run_group_shell(QCommandLineParser *parser, QString command);
     //int run_group_stat(QCommandLineParser *parser, QString command);
     //int run_group_zephyr(QCommandLineParser *parser, QString command);
-    //int run_group_img(QCommandLineParser *parser, QString command);
+    int run_group_img(QCommandLineParser *parser, QString command);
 
     void set_group_transport_settings(smp_group *group);
     void set_group_transport_settings(smp_group *group, uint32_t timeout);
 
     smp_processor *processor;
     smp_group_os_mgmt *group_os;
+    smp_group_img_mgmt *group_img;
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
     smp_uart *transport_uart;
 #endif
