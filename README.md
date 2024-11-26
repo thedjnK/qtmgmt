@@ -30,6 +30,14 @@ qtmgmt is a cross-platform MCUmgr CLI utility, designed for issuing commands to 
 
 Functionality can be disabled in custom builds by uncommenting the SKIP lines in ``qtmgmt-includes.pri``, which allows for lean and reduced size builds.
 
+## Downloading
+
+Test builds of unstable work-in-progress versions are provided by CI jobs currently:
+
+ * [Linux (x86_64)](https://github.com/thedjnK/AuTerm-Build/actions/workflows/qtmgmt-linux.yml)
+ * [Windows (x86_64)](https://github.com/thedjnK/AuTerm-Build/actions/workflows/qtmgmt-windows.yml)
+ * [mac (x86_64 and arm64)](https://github.com/thedjnK/AuTerm-Build/actions/workflows/qtmgmt-mac.yml)
+
 ## Help and contributing
 
 Users are welcome to open issues and submit pull requests to have features merged. PRs on github should target the `main` branch, PRs on the internal git server should target the `develop` branch.
