@@ -6,7 +6,6 @@ TEMPLATE = lib
 
 CONFIG += plugin
 CONFIG += c++17
-CONFIG += staticlib
 
 INCLUDEPATH    += AuTerm/plugins/mcumgr
 TARGET          = $$qtLibraryTarget(plugin_mcumgr)

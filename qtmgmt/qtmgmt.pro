@@ -58,9 +58,17 @@ CONFIG(release, debug|release) {
     DESTDIR = ../debug
 }
 
-win32: LIBS += -L$$DESTDIR -lplugin_mcumgr
-else: LIBS += -L$$DESTDIR -lplugin_mcumgr
+contains(CONFIG, static) {
+    win32: LIBS += -L$$DESTDIR -lplugin_mcumgr
+    else: LIBS += -L$$DESTDIR -lplugin_mcumgr
 
-win32-g++: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.a
-else:win32:!win32-g++: PRE_TARGETDEPS += $$DESTDIR/plugin_mcumgr.lib
-else: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.a
+    win32-g++: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.a
+    else:win32:!win32-g++: PRE_TARGETDEPS += $$DESTDIR/plugin_mcumgr.lib
+    else: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.a
+} else {
+    win32: LIBS += -L$$DESTDIR -lplugin_mcumgr.dll
+    else: LIBS += -L$$DESTDIR -l:plugin_mcumgr.so
+
+    win32-g++: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.dll
+    else: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.so
+}
