@@ -235,7 +235,16 @@ private:
     const QString value_transport_udp = "udp";
     const QString value_transport_lorawan = "lorawan";
 
+    const uint16_t minimum_smp_mtu = 96;
+    const uint16_t maximum_smp_mtu = 16384;
+
+    const uint32_t default_transport_uart_baud = 115200;
+    const uint16_t default_transport_udp_port = 1337;
+    const uint16_t default_transport_lorawan_port = 1883;
+    const uint16_t default_transport_lorawan_port_ssl = 8883;
+
     typedef void (command_processor::*add_group_options_t)(QList<entry_t> *entries, QString command);
+    typedef int (command_processor::*run_group_t)(QCommandLineParser *parser, QString command);
     typedef void (command_processor::*add_transport_options_t)(QList<entry_t> *entries);
 
     struct supported_command_t {
@@ -248,6 +257,7 @@ private:
         QStringList arguments;
         smp_group *group;
         add_group_options_t options_function;
+        run_group_t run_function;
         QList<supported_command_t> commands;
     };
 
@@ -260,7 +270,7 @@ private:
 
     const QList<supported_group_t> supported_groups = {
 #if 0
-        {"Enumeration management", {"enumeration", "enum"}, group_enum, &command_processor::add_group_options_enum,
+        {"Enumeration management", {"enumeration", "enum"}, group_enum, &command_processor::add_group_options_enum, &command_processor::run_group_enum,
             {
                 {"Number of supported groups", {"count"}},
                 {"List supported groups", {"list"}},
@@ -268,7 +278,7 @@ private:
                 {"Get details of supported groups", {"details"}}
             }
         },
-        {"Filesystem management", {"filesystem", "fs"}, group_fs, &command_processor::add_group_options_fs,
+        {"Filesystem management", {"filesystem", "fs"}, group_fs, &command_processor::add_group_options_fs, &command_processor::run_group_fs,
             {
                 {"Upload file to device", {"upload"}},
                 {"Download file from device", {"download"}},
@@ -279,7 +289,7 @@ private:
             }
         },
 #endif
-        {"Image management", {"image", "img"}, group_img, &command_processor::add_group_options_img,
+        {"Image management", {"image", "img"}, group_img, &command_processor::add_group_options_img, &command_processor::run_group_img,
             {
                {"Get image state(s)", {"get-state"}},
                {"Set image state", {"set-state"}},
@@ -288,7 +298,7 @@ private:
                {"Get information on slots", {"slot-info"}}
             }
         },
-        {"Operating system management", {"os"}, group_os, &command_processor::add_group_options_os,
+        {"Operating system management", {"os"}, group_os, &command_processor::add_group_options_os, &command_processor::run_group_os,
              {
                 {"Echo text back", {"echo"}},
 #if 0
@@ -306,10 +316,10 @@ private:
             }
         }
 #if 0
-        {"Settings management", {"settings"}, group_settings, &command_processor::add_group_options_settings},
-        {"Shell management", {"shell"}, group_shell, &command_processor::add_group_options_shell},
-        {"Statistics management", {"statistics", "stats"}, group_stat, &command_processor::add_group_options_stat},
-        {"Zephyr basic management", {"zephyr"}, group_zephyr, &command_processor::add_group_options_zephyr},
+        {"Settings management", {"settings"}, group_settings, &command_processor::add_group_options_settings}, &command_processor::run_group_settings,
+        {"Shell management", {"shell"}, group_shell, &command_processor::add_group_options_shell}, &command_processor::run_group_shell,
+        {"Statistics management", {"statistics", "stats"}, group_stat, &command_processor::add_group_options_stat}, &command_processor::run_group_stat,
+        {"Zephyr basic management", {"zephyr"}, group_zephyr, &command_processor::add_group_options_zephyr}, &command_processor::run_group_zephyr,
 #endif
     };
 

@@ -294,7 +294,7 @@ void command_processor::run()
     //Check for special help options
     if (parser.isSet(option_help_all) || parser.isSet(option_help_transports) || parser.isSet(option_help_groups) || parser.isSet(option_help_commands))
     {
-        uint8_t i = 0;
+        i = 0;
 
         if (parser.isSet(option_help_all))
         {
@@ -302,7 +302,7 @@ void command_processor::run()
         }
         else if (parser.isSet(option_help_transports))
         {
-            uint8_t l = supported_transports.length();
+            l = supported_transports.length();
 
             fputs(qPrintable(tr("Supported transports:") % newline), stdout);
 
@@ -452,37 +452,23 @@ void command_processor::run()
 
     if (parser.isSet(option_transport))
     {
+        i = 0;
+        l = supported_transports.length();
+
         user_transport = parser.value(option_transport);
 
-//TODO: rework to use supported_transports
-        if (0)
+        while (i < l)
         {
+            if (supported_transports[i].arguments.indexOf(user_transport) != -1)
+            {
+                (this->*supported_transports[i].options_function)(&entries);
+                break;
+            }
+
+            ++i;
         }
-#if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
-        else if (user_transport == value_transport_uart)
-        {
-            add_transport_options_uart(&entries);
-        }
-#endif
-#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
-        else if (user_transport == value_transport_bluetooth)
-        {
-            add_transport_options_bluetooth(&entries);
-        }
-#endif
-#if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
-        else if (user_transport == value_transport_udp)
-        {
-            add_transport_options_udp(&entries);
-        }
-#endif
-#if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
-        else if (user_transport == value_transport_lorawan)
-        {
-            add_transport_options_lorawan(&entries);
-        }
-#endif
-        else
+
+        if (i == l)
         {
             fputs(qPrintable(tr("Error: invalid transport specified")), stdout);
             QCoreApplication::exit(EXIT_CODE_INVALID_TRANSPORT);
@@ -492,45 +478,23 @@ void command_processor::run()
 
     if (parser.isSet(option_group))
     {
+        i = 0;
+        l = supported_groups.length();
+
         user_group = parser.value(option_group);
 
-//TODO: rework to use supported_groups
-        if (0)
+        while (i < l)
         {
+            if (supported_groups[i].arguments.indexOf(user_group) != -1)
+            {
+                (this->*supported_groups[i].options_function)(&entries, parser.value(option_command));
+                break;
+            }
+
+            ++i;
         }
-        else if (user_group == value_group_enum)
-        {
-            add_group_options_enum(&entries, parser.value(option_command));
-        }
-        else if (user_group == value_group_fs)
-        {
-            add_group_options_fs(&entries, parser.value(option_command));
-        }
-        else if (user_group == value_group_os)
-        {
-            add_group_options_os(&entries, parser.value(option_command));
-        }
-        else if (user_group == value_group_settings)
-        {
-            add_group_options_settings(&entries, parser.value(option_command));
-        }
-        else if (user_group == value_group_shell)
-        {
-            add_group_options_shell(&entries, parser.value(option_command));
-        }
-        else if (user_group == value_group_stat)
-        {
-            add_group_options_stat(&entries, parser.value(option_command));
-        }
-        else if (user_group == value_group_zephyr)
-        {
-            add_group_options_zephyr(&entries, parser.value(option_command));
-        }
-        else if (user_group == value_group_img)
-        {
-            add_group_options_img(&entries, parser.value(option_command));
-        }
-        else
+
+        if (i == l)
         {
             fputs(qPrintable(tr("Error: invalid group specified")), stdout);
             QCoreApplication::exit(EXIT_CODE_INVALID_GROUP);
@@ -604,12 +568,12 @@ void command_processor::run()
         {
             bool option_present = false;
             bool exclusivity_breached = false;
-            uint8_t c = 0;
-            uint8_t m = entries[i].option.length();
+            uint8_t i2 = 0;
+            uint8_t l2 = entries[i].option.length();
 
-            while (c < m)
+            while (i2 < l2)
             {
-                if (parser.isSet(*entries[i].option[c]) == true)
+                if (parser.isSet(*entries[i].option[i2]) == true)
                 {
                     if (entries[i].exclusive == true && option_present == true)
                     {
@@ -621,7 +585,7 @@ void command_processor::run()
                     option_present = true;
                 }
 
-                ++c;
+                ++i2;
             }
 
             if (entries[i].required == true && option_present == false)
@@ -629,15 +593,15 @@ void command_processor::run()
                 //Required option not present, output error with list of options
                 QString required_options;
 
-                c = 0;
-                m = entries[i].option.length();
+                i2 = 0;
+                l2 = entries[i].option.length();
 
-                while (c < m)
+                while (i2 < l2)
                 {
-                    required_options.append(entries[i].option[c]->names().join(" or --"));
-                    ++c;
+                    required_options.append(entries[i].option[i2]->names().join(" or --"));
+                    ++i2;
 
-                    if (c < m)
+                    if (i2 < l2)
                     {
                         required_options.append(" or --");
                     }
@@ -651,17 +615,17 @@ void command_processor::run()
                 //Multiple exclusive options used, output error with details
                 QString conflicting_options;
 
-                c = 0;
-                m = entries[i].option.length();
+                i2 = 0;
+                l2 = entries[i].option.length();
 
-                while (c < m)
+                while (i2 < l2)
                 {
-                    if (parser.isSet(*entries[i].option[c]))
+                    if (parser.isSet(*entries[i].option[i2]))
                     {
-                        conflicting_options.append(entries[i].option[c]->names().join(" and --")).append(" and --");
+                        conflicting_options.append(entries[i].option[i2]->names().join(" and --")).append(" and --");
                     }
 
-                    ++c;
+                    ++i2;
                 }
 
                 conflicting_options.remove((conflicting_options.length() - 7), 7);
@@ -686,8 +650,7 @@ void command_processor::run()
     {
         smp_mtu = parser.value(option_mtu).toUInt();
 
-//TODO: consts
-        if (smp_mtu < 96 || smp_mtu > 16384)
+        if (smp_mtu < minimum_smp_mtu || smp_mtu > maximum_smp_mtu)
         {
             fputs(qPrintable(tr("Argument out of range: ") % "--" % option_mtu.names().first() % newline), stdout);
             QCoreApplication::exit(EXIT_CODE_NUMERIAL_ARGUMENT_OUT_OF_RANGE);
@@ -704,7 +667,6 @@ void command_processor::run()
         smp_v2 = true;
     }
 
-//TODO: rework to use pointers
     //Set up and open transport
     if (0)
     {
@@ -716,12 +678,6 @@ void command_processor::run()
         active_transport = transport_uart;
 
         exit_code = configure_transport_options_uart(transport_uart, &parser);
-
-        if (exit_code != EXIT_CODE_SUCCESS)
-        {
-            QCoreApplication::exit(exit_code);
-            return;
-        }
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
@@ -731,12 +687,6 @@ void command_processor::run()
         active_transport = transport_bluetooth;
 
         exit_code = configure_transport_options_bluetooth(transport_bluetooth, &parser);
-
-        if (exit_code != EXIT_CODE_SUCCESS)
-        {
-            QCoreApplication::exit(exit_code);
-            return;
-        }
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
@@ -746,12 +696,6 @@ void command_processor::run()
         active_transport = transport_udp;
 
         exit_code = configure_transport_options_udp(transport_udp, &parser);
-
-        if (exit_code != EXIT_CODE_SUCCESS)
-        {
-            QCoreApplication::exit(exit_code);
-            return;
-        }
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
@@ -761,14 +705,14 @@ void command_processor::run()
         active_transport = transport_lorawan;
 
         exit_code = configure_transport_options_lorawan(transport_lorawan, &parser);
-
-        if (exit_code != EXIT_CODE_SUCCESS)
-        {
-            QCoreApplication::exit(exit_code);
-            return;
-        }
     }
 #endif
+
+    if (exit_code != EXIT_CODE_SUCCESS)
+    {
+        QCoreApplication::exit(exit_code);
+        return;
+    }
 
     //Open transport, exit if it failed
     connect(active_transport, SIGNAL(connected()), this, SLOT(transport_connected()));
@@ -797,7 +741,6 @@ void command_processor::run()
     connect(active_transport, SIGNAL(receive_waiting(smp_message*)), processor, SLOT(message_received(smp_message*)));
     //connect(processor, SIGNAL(custom_message_callback(custom_message_callback_t,smp_error_t*)), this, SLOT(custom_message_callback(custom_message_callback_t,smp_error_t*)));
 
-//TODO: rework to use pointers
     if (0)
     {
     }
@@ -805,82 +748,60 @@ void command_processor::run()
     {
         group_enum = new smp_group_enum_mgmt(processor);
         active_group = group_enum;
-
-        connect(group_enum, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_enum, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_enum(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_fs)
     {
         group_fs = new smp_group_fs_mgmt(processor);
         active_group = group_fs;
-
-        connect(group_fs, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_fs, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_fs(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_os)
     {
         group_os = new smp_group_os_mgmt(processor);
         active_group = group_os;
-
-        connect(group_os, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_os, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_os(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_settings)
     {
         group_settings = new smp_group_settings_mgmt(processor);
         active_group = group_settings;
-
-        connect(group_settings, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_settings, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_settings(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_shell)
     {
         group_shell = new smp_group_shell_mgmt(processor);
         active_group = group_shell;
-
-        connect(group_shell, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_shell, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_shell(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_stat)
     {
         group_stat = new smp_group_stat_mgmt(processor);
         active_group = group_stat;
-
-        connect(group_stat, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_stat, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_stat(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_zephyr)
     {
         group_zephyr = new smp_group_zephyr_mgmt(processor);
         active_group = group_zephyr;
-
-        connect(group_zephyr, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_zephyr, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_zephyr(&parser, parser.value(option_command));
     }
     else if (user_group == value_group_img)
     {
         group_img = new smp_group_img_mgmt(processor);
         active_group = group_img;
-
-        connect(group_img, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
-        connect(group_img, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
-
-        exit_code = run_group_img(&parser, parser.value(option_command));
     }
+
+    i = 0;
+    l = supported_groups.length();
+
+    while (i < l)
+    {
+        if (supported_groups[i].arguments.indexOf(user_group) != -1)
+        {
+            break;
+        }
+
+        ++i;
+    }
+
+    connect(active_group, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+    connect(active_group, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+
+    exit_code = (this->*supported_groups[i].run_function)(&parser, parser.value(option_command));
 
     if (exit_code != EXIT_CODE_SUCCESS)
     {
@@ -918,7 +839,7 @@ int command_processor::configure_transport_options_uart(smp_uart *transport, QCo
     }
     else
     {
-        uart_configuration.baud = 115200;
+        uart_configuration.baud = default_transport_uart_baud;
     }
 
     if (parser->isSet(option_transport_uart_flow_control) == true)
@@ -1089,7 +1010,7 @@ int command_processor::configure_transport_options_udp(smp_udp *transport, QComm
     }
     else
     {
-        udp_configuration.port = 1337;
+        udp_configuration.port = default_transport_udp_port;
     }
 
     transport->set_connection_config(&udp_configuration);
@@ -1146,11 +1067,11 @@ int command_processor::configure_transport_options_lorawan(smp_lorawan *transpor
     {
         if (lorawan_configuration.tls == true)
         {
-            lorawan_configuration.port = 8883;
+            lorawan_configuration.port = default_transport_lorawan_port_ssl;
         }
         else
         {
-            lorawan_configuration.port = 1883;
+            lorawan_configuration.port = default_transport_lorawan_port;
         }
     }
 
