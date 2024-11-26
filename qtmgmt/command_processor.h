@@ -234,6 +234,99 @@ private:
     const QString value_transport_bluetooth = "bluetooth";
     const QString value_transport_udp = "udp";
     const QString value_transport_lorawan = "lorawan";
+
+    typedef void (command_processor::*add_group_options_t)(QList<entry_t> *entries, QString command);
+    typedef void (command_processor::*add_transport_options_t)(QList<entry_t> *entries);
+
+    struct supported_command_t {
+        QString name;
+        QStringList arguments;
+    };
+
+    struct supported_group_t {
+        QString name;
+        QStringList arguments;
+        smp_group *group;
+        add_group_options_t options_function;
+        QList<supported_command_t> commands;
+    };
+
+    struct supported_transport_t {
+        QString name;
+        QStringList arguments;
+        smp_transport *transport;
+        add_transport_options_t options_function;
+    };
+
+    const QList<supported_group_t> supported_groups = {
+#if 0
+        {"Enumeration management", {"enumeration", "enum"}, group_enum, &command_processor::add_group_options_enum,
+            {
+                {"Number of supported groups", {"count"}},
+                {"List supported groups", {"list"}},
+                {"Get information on one supported group", {"single"}},
+                {"Get details of supported groups", {"details"}}
+            }
+        },
+        {"Filesystem management", {"filesystem", "fs"}, group_fs, &command_processor::add_group_options_fs,
+            {
+                {"Upload file to device", {"upload"}},
+                {"Download file from device", {"download"}},
+                {"Get file status", {"status"}},
+                {"Get hash/checksum of file", {"hash", "checksum", "hash-checksum"}},
+                {"Get a list of supported hashes/checksums", {"supported-hashes", "supported-checksums", "supported-hashes-checksums"}},
+                {"Close open file", {"close"}}
+            }
+        },
+#endif
+        {"Image management", {"image", "img"}, group_img, &command_processor::add_group_options_img,
+            {
+               {"Get image state(s)", {"get-state"}},
+               {"Set image state", {"set-state"}},
+               {"Upload firmware update", {"upload"}},
+               {"Erase slot", {"erase"}},
+               {"Get information on slots", {"slot-info"}}
+            }
+        },
+        {"Operating system management", {"os"}, group_os, &command_processor::add_group_options_os,
+             {
+                {"Echo text back", {"echo"}},
+#if 0
+                {"List running tasks/threads", {"tasks"}},
+                {"Get memory pool details", {"memory"}},
+#endif
+                {"Reset device", {"reset"}},
+#if 0
+                {"Get supported MCUmgr parameters", {"mcumgr-parameters"}},
+                {"Get application information", {"application-info"}},
+                {"Get the device time and date", {"get-date-time"}},
+                {"Set the device time and date", {"set-date-time"}},
+                {"Get information on bootloader", {"bootloader-info"}}
+#endif
+            }
+        }
+#if 0
+        {"Settings management", {"settings"}, group_settings, &command_processor::add_group_options_settings},
+        {"Shell management", {"shell"}, group_shell, &command_processor::add_group_options_shell},
+        {"Statistics management", {"statistics", "stats"}, group_stat, &command_processor::add_group_options_stat},
+        {"Zephyr basic management", {"zephyr"}, group_zephyr, &command_processor::add_group_options_zephyr},
+#endif
+    };
+
+    const QList<supported_transport_t> supported_transports = {
+#if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
+        {"UART transport", {"uart", "serial"}, transport_uart, &command_processor::add_transport_options_uart},
+#endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
+        {"Bluetooth Low Energy transport", {"bluetooth", "bt"}, transport_bluetooth, &command_processor::add_transport_options_bluetooth},
+#endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
+        {"UDP transport", {"udp"}, transport_udp, &command_processor::add_transport_options_udp},
+#endif
+#if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
+        {"LoRaWAN (TTS/MQTT) transport", {"lorawan"}, transport_lorawan, &command_processor::add_transport_options_lorawan},
+#endif
+    };
 };
 
 #endif // COMMAND_PROCESSOR_H

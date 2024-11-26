@@ -128,6 +128,13 @@ const QCommandLineOption option_mtu("mtu", "MTU (default: 256, can be: 96-16384)
 const QCommandLineOption option_smp_v1("smp-v1", "Use SMP version 1");
 const QCommandLineOption option_smp_v2("smp-v2", "Use SMP version 2 (default)");
 
+const QString indent = "    ";
+#ifdef WIN32
+const QString newline = "\r\n";
+#else
+const QString newline = "\n";
+#endif
+
 /******************************************************************************/
 // Local Functions or Private Members
 /******************************************************************************/
@@ -243,7 +250,11 @@ void command_processor::run()
 #ifdef Q_OS_WIN
                                              << "?"
 #endif
-                                             << "h" << "help", "Show help/command line options.");
+                                             << "h" << "help", "Show help for provided options");
+    const QCommandLineOption option_help_all("help-all", "Show all help of every possible option");
+    const QCommandLineOption option_help_transports("help-transports", "Show all help of all transports");
+    const QCommandLineOption option_help_groups("help-groups", "Show all help of all groups");
+    const QCommandLineOption option_help_commands("help-commands", "Show all help of all groups");
     const QCommandLineOption option_version = parser.addVersionOption();
     int exit_code = EXIT_CODE_SUCCESS;
     QString user_transport;
@@ -255,6 +266,10 @@ void command_processor::run()
 
     parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
     parser.addOption(option_help);
+    parser.addOption(option_help_all);
+    parser.addOption(option_help_transports);
+    parser.addOption(option_help_groups);
+    parser.addOption(option_help_commands);
     parser.addOption(option_transport);
     parser.addOption(option_group);
     parser.addOption(option_command);
@@ -263,113 +278,264 @@ void command_processor::run()
 
     if (parser.isSet(option_version))
     {
-        fputs(qPrintable(QCoreApplication::applicationName() % tr(" version ") % QCoreApplication::applicationVersion() % "\n"), stdout);
+        fputs(qPrintable(QCoreApplication::applicationName() % tr(" version ") % QCoreApplication::applicationVersion() % newline), stdout);
         QCoreApplication::exit(EXIT_CODE_SUCCESS);
         return;
     }
 
-    if (!parser.isSet(option_transport) || !parser.isSet(option_group) || !parser.isSet(option_command))
+    if (((parser.isSet(option_help_all) ? 1 : 0) + (parser.isSet(option_help_transports) ? 1 : 0) + (parser.isSet(option_help_groups) ? 1 : 0) + (parser.isSet(option_help_commands) ? 1 : 0) + (parser.isSet(option_help) ? 1 : 0)) > 1)
     {
-        if (!parser.isSet(option_transport))
+        QString help_options = "--" % option_help.names().join(" or --") % " or --" % option_help_all.names().join(" or --") % " or --" % option_help_transports.names().join(" or --") % " or --" % option_help_groups.names().join(" or --") % " or --" % option_help_commands.names().join(" or --");
+        fputs(qPrintable(tr("Conflicting command line options, only one of: ") % help_options % tr(" may be provided") % newline), stdout);
+        QCoreApplication::exit(EXIT_CODE_SUCCESS);
+        return;
+    }
+
+    //Check for special help options
+    if (parser.isSet(option_help_all) || parser.isSet(option_help_transports) || parser.isSet(option_help_groups) || parser.isSet(option_help_commands))
+    {
+        uint8_t i = 0;
+
+        if (parser.isSet(option_help_all))
         {
-            fputs(qPrintable(tr("Missing required argument: ") % "--" % option_transport.names().join(" or --") % "\n"), stdout);
+            fputs(qPrintable("Not yet supported\n"), stdout);
+        }
+        else if (parser.isSet(option_help_transports))
+        {
+            uint8_t l = supported_transports.length();
+
+            fputs(qPrintable(tr("Supported transports:") % newline), stdout);
+
+            while (i < l)
+            {
+                uint8_t i2 = 0;
+                uint8_t l2;
+                QList<entry_t> transport_entry;
+
+                (this->*supported_transports[i].options_function)(&transport_entry);
+                fputs(qPrintable(indent % supported_transports[i].name % ":" % newline % indent % indent % "--transport " % supported_transports[i].arguments.join(" or --transport ") % newline), stdout);
+                l2 = transport_entry.length();
+
+                while (i2 < l2)
+                {
+                    QString argument_text;
+                    uint8_t i3 = 0;
+                    uint8_t l3 = transport_entry[i2].option.length();
+
+                    while (i3 < l3)
+                    {
+                        uint8_t i4 = 0;
+                        uint8_t l4 = transport_entry[i2].option[i3]->names().length();
+
+                        while (i4 < l4)
+                        {
+                            argument_text.append("--" % transport_entry[i2].option[i4]->names()[i4]);
+
+                            if (transport_entry[i2].option[i3]->valueName().length() > 0)
+                            {
+                                argument_text.append(" <" % transport_entry[i2].option[i3]->valueName() % ">");
+                            }
+
+                            argument_text.append(" (" % transport_entry[i2].option[i3]->description() % ")");
+                            ++i4;
+
+                            if (i4 < l4)
+                            {
+                                argument_text.append(" or ");
+                            }
+                        }
+
+                        ++i3;
+
+                        if (i3 < l3)
+                        {
+                            argument_text.append((transport_entry[i2].exclusive == true ? tr(" or ") : tr(" and ")));
+                        }
+                    }
+
+                    fputs(qPrintable(indent % indent % indent % argument_text % newline), stdout);
+                    ++i2;
+                }
+
+                ++i;
+            }
+        }
+        else if (parser.isSet(option_help_groups))
+        {
+            uint8_t l = supported_groups.length();
+
+            fputs(qPrintable(tr("Supported groups:") % newline), stdout);
+
+            while (i < l)
+            {
+                fputs(qPrintable(indent % supported_groups[i].name % ":" % newline % indent % indent % "--group " % supported_groups[i].arguments.join(" or --group ") % newline), stdout);
+                ++i;
+            }
+        }
+        else if (parser.isSet(option_help_commands))
+        {
+            uint8_t l = supported_groups.length();
+
+            fputs(qPrintable(tr("Supported commands:") % newline), stdout);
+
+            while (i < l)
+            {
+                uint8_t i2 = 0;
+                uint8_t l2 = supported_groups[i].commands.length();
+
+                fputs(qPrintable(indent % supported_groups[i].name % ":" % newline % indent % indent % "--group " % supported_groups[i].arguments.join(" or --group ") % newline), stdout);
+
+                while (i2 < l2)
+                {
+                    uint8_t i3 = 0;
+                    uint8_t l3;
+                    QList<entry_t> command_entry;
+
+                    (this->*supported_groups[i].options_function)(&command_entry, supported_groups[i].commands[i2].arguments.first());
+                    fputs(qPrintable(indent % indent % indent % supported_groups[i].commands[i2].name % ":" % newline % indent % indent % indent % indent % "--command " % supported_groups[i].commands[i2].arguments.join(" or --command ") % newline), stdout);
+                    l3 = command_entry.length();
+
+                    while (i3 < l3)
+                    {
+                        QString argument_text;
+                        uint8_t i4 = 0;
+                        uint8_t l4 = command_entry[i3].option.length();
+
+                        while (i4 < l4)
+                        {
+                            uint8_t i5 = 0;
+                            uint8_t l5 = command_entry[i3].option[i4]->names().length();
+
+                            while (i5 < l5)
+                            {
+                                argument_text.append("--" % command_entry[i3].option[i4]->names()[i5]);
+
+                                if (command_entry[i3].option[i4]->valueName().length() > 0)
+                                {
+                                    argument_text.append(" <" % command_entry[i3].option[i4]->valueName() % ">");
+                                }
+
+                                argument_text.append(" (" % command_entry[i3].option[i4]->description() % ")");
+                                ++i5;
+
+                                if (i5 < l5)
+                                {
+                                    argument_text.append(" or ");
+                                }
+                            }
+
+                            ++i4;
+
+                            if (i4 < l4)
+                            {
+                                argument_text.append((command_entry[i3].exclusive == true ? tr(" or ") : tr(" and ")));
+                            }
+                        }
+
+                        fputs(qPrintable(indent % indent % indent % indent % indent % argument_text % newline), stdout);
+                        ++i3;
+                    }
+
+                    ++i2;
+                }
+
+                ++i;
+            }
         }
 
-        if (!parser.isSet(option_group))
-        {
-            fputs(qPrintable(tr("Missing required argument: ") % "--" % option_group.names().join(" or --") % "\n"), stdout);
-        }
-
-        if (!parser.isSet(option_command))
-        {
-            fputs(qPrintable(tr("Missing required argument: ") % "--" % option_command.names().join(" or --") % "\n"), stdout);
-        }
-
-        QCoreApplication::exit(EXIT_CODE_MISSING_REQUIRED_ARGUMENTS);
+        QCoreApplication::exit(EXIT_CODE_SUCCESS);
         return;
     }
 
     //Add SMP version command line
     entries.append({{&option_smp_v1, &option_smp_v2}, false, true});
 
-    user_transport = parser.value(option_transport);
+    if (parser.isSet(option_transport))
+    {
+        user_transport = parser.value(option_transport);
 
-    if (0)
-    {
-    }
+//TODO: rework to use supported_transports
+        if (0)
+        {
+        }
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
-    else if (user_transport == value_transport_uart)
-    {
-        add_transport_options_uart(&entries);
-    }
+        else if (user_transport == value_transport_uart)
+        {
+            add_transport_options_uart(&entries);
+        }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
-    else if (user_transport == value_transport_bluetooth)
-    {
-        add_transport_options_bluetooth(&entries);
-    }
+        else if (user_transport == value_transport_bluetooth)
+        {
+            add_transport_options_bluetooth(&entries);
+        }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
-    else if (user_transport == value_transport_udp)
-    {
-        add_transport_options_udp(&entries);
-    }
+        else if (user_transport == value_transport_udp)
+        {
+            add_transport_options_udp(&entries);
+        }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
-    else if (user_transport == value_transport_lorawan)
-    {
-        add_transport_options_lorawan(&entries);
-    }
+        else if (user_transport == value_transport_lorawan)
+        {
+            add_transport_options_lorawan(&entries);
+        }
 #endif
-    else
-    {
-        fputs(qPrintable(tr("Error: invalid transport specified")), stdout);
-        QCoreApplication::exit(EXIT_CODE_INVALID_TRANSPORT);
-        return;
+        else
+        {
+            fputs(qPrintable(tr("Error: invalid transport specified")), stdout);
+            QCoreApplication::exit(EXIT_CODE_INVALID_TRANSPORT);
+            return;
+        }
     }
 
-    user_group = parser.value(option_group);
+    if (parser.isSet(option_group))
+    {
+        user_group = parser.value(option_group);
 
-    if (0)
-    {
-    }
-    else if (user_group == value_group_enum)
-    {
-        add_group_options_enum(&entries, parser.value(option_command));
-    }
-    else if (user_group == value_group_fs)
-    {
-        add_group_options_fs(&entries, parser.value(option_command));
-    }
-    else if (user_group == value_group_os)
-    {
-        add_group_options_os(&entries, parser.value(option_command));
-    }
-    else if (user_group == value_group_settings)
-    {
-        add_group_options_settings(&entries, parser.value(option_command));
-    }
-    else if (user_group == value_group_shell)
-    {
-        add_group_options_shell(&entries, parser.value(option_command));
-    }
-    else if (user_group == value_group_stat)
-    {
-        add_group_options_stat(&entries, parser.value(option_command));
-    }
-    else if (user_group == value_group_zephyr)
-    {
-        add_group_options_zephyr(&entries, parser.value(option_command));
-    }
-    else if (user_group == value_group_img)
-    {
-        add_group_options_img(&entries, parser.value(option_command));
-    }
-    else
-    {
-        fputs(qPrintable(tr("Error: invalid group specified")), stdout);
-        QCoreApplication::exit(EXIT_CODE_INVALID_GROUP);
-        return;
+//TODO: rework to use supported_groups
+        if (0)
+        {
+        }
+        else if (user_group == value_group_enum)
+        {
+            add_group_options_enum(&entries, parser.value(option_command));
+        }
+        else if (user_group == value_group_fs)
+        {
+            add_group_options_fs(&entries, parser.value(option_command));
+        }
+        else if (user_group == value_group_os)
+        {
+            add_group_options_os(&entries, parser.value(option_command));
+        }
+        else if (user_group == value_group_settings)
+        {
+            add_group_options_settings(&entries, parser.value(option_command));
+        }
+        else if (user_group == value_group_shell)
+        {
+            add_group_options_shell(&entries, parser.value(option_command));
+        }
+        else if (user_group == value_group_stat)
+        {
+            add_group_options_stat(&entries, parser.value(option_command));
+        }
+        else if (user_group == value_group_zephyr)
+        {
+            add_group_options_zephyr(&entries, parser.value(option_command));
+        }
+        else if (user_group == value_group_img)
+        {
+            add_group_options_img(&entries, parser.value(option_command));
+        }
+        else
+        {
+            fputs(qPrintable(tr("Error: invalid group specified")), stdout);
+            QCoreApplication::exit(EXIT_CODE_INVALID_GROUP);
+            return;
+        }
     }
 
     //Add all entries to the parser
@@ -394,6 +560,27 @@ void command_processor::run()
     {
         fputs(qPrintable(parser.helpText()), stdout);
         QCoreApplication::exit(EXIT_CODE_SUCCESS);
+        return;
+    }
+
+    if (!parser.isSet(option_transport) || !parser.isSet(option_group) || !parser.isSet(option_command))
+    {
+        if (!parser.isSet(option_transport))
+        {
+            fputs(qPrintable(tr("Missing required argument: ") % "--" % option_transport.names().join(" or --") % newline), stdout);
+        }
+
+        if (!parser.isSet(option_group))
+        {
+            fputs(qPrintable(tr("Missing required argument: ") % "--" % option_group.names().join(" or --") % newline), stdout);
+        }
+
+        if (!parser.isSet(option_command))
+        {
+            fputs(qPrintable(tr("Missing required argument: ") % "--" % option_command.names().join(" or --") % newline), stdout);
+        }
+
+        QCoreApplication::exit(EXIT_CODE_MISSING_REQUIRED_ARGUMENTS);
         return;
     }
 
@@ -456,7 +643,7 @@ void command_processor::run()
                     }
                 }
 
-                fputs(qPrintable(tr("Missing required argument: ") % "--" % required_options % "\n"), stdout);
+                fputs(qPrintable(tr("Missing required argument: ") % "--" % required_options % newline), stdout);
                 failed = true;
             }
             else if (exclusivity_breached == true)
@@ -478,7 +665,7 @@ void command_processor::run()
                 }
 
                 conflicting_options.remove((conflicting_options.length() - 7), 7);
-                fputs(qPrintable(tr("Conflicting exclusive arguments: ") % "--" % conflicting_options % "\n"), stdout);
+                fputs(qPrintable(tr("Conflicting exclusive arguments: ") % "--" % conflicting_options % newline), stdout);
                 failed = true;
             }
         }
@@ -502,7 +689,7 @@ void command_processor::run()
 //TODO: consts
         if (smp_mtu < 96 || smp_mtu > 16384)
         {
-            fputs(qPrintable(tr("Argument out of range: ") % "--" % option_mtu.names().first() % "\n"), stdout);
+            fputs(qPrintable(tr("Argument out of range: ") % "--" % option_mtu.names().first() % newline), stdout);
             QCoreApplication::exit(EXIT_CODE_NUMERIAL_ARGUMENT_OUT_OF_RANGE);
             return;
         }
@@ -517,6 +704,7 @@ void command_processor::run()
         smp_v2 = true;
     }
 
+//TODO: rework to use pointers
     //Set up and open transport
     if (0)
     {
@@ -590,7 +778,7 @@ void command_processor::run()
 
     if (exit_code != SMP_TRANSPORT_ERROR_OK)
     {
-        fputs(qPrintable(tr("Transport open failed: ") % QString::number(exit_code) % "\n"), stdout);
+        fputs(qPrintable(tr("Transport open failed: ") % QString::number(exit_code) % newline), stdout);
         QCoreApplication::exit(EXIT_CODE_TRANSPORT_OPEN_FAILED);
         return;
     }
@@ -609,6 +797,7 @@ void command_processor::run()
     connect(active_transport, SIGNAL(receive_waiting(smp_message*)), processor, SLOT(message_received(smp_message*)));
     //connect(processor, SIGNAL(custom_message_callback(custom_message_callback_t,smp_error_t*)), this, SLOT(custom_message_callback(custom_message_callback_t,smp_error_t*)));
 
+//TODO: rework to use pointers
     if (0)
     {
     }
@@ -1393,48 +1582,48 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
                     if ((*img_mgmt_get_state_images)[i].image_set == true)
                     {
-                        fputs(qPrintable(tr("Image ") % QString::number((*img_mgmt_get_state_images)[i].image) % "\n"), stdout);
+                        fputs(qPrintable(tr("Image ") % QString::number((*img_mgmt_get_state_images)[i].image) % newline), stdout);
                     }
                     else
                     {
-                        fputs(qPrintable(tr("Image (assumed ") % QString::number(i) % ")\n"), stdout);
+                        fputs(qPrintable(tr("Image (assumed ") % QString::number(i) % ")" % newline), stdout);
                     }
 
                     while (c < m)
                     {
                         AutEscape::to_hex(&(*img_mgmt_get_state_images)[i].slot_list[c].hash);
-                        fputs(qPrintable(tr("\tSlot ") % QString::number((*img_mgmt_get_state_images)[i].slot_list[c].slot) % "\n"), stdout);
-                        fputs(qPrintable(tr("\t\tHash: ") % (*img_mgmt_get_state_images)[i].slot_list[c].hash % "\n"), stdout);
-                        fputs(qPrintable(tr("\t\tVersion: ") % (*img_mgmt_get_state_images)[i].slot_list[c].version % "\n"), stdout);
+                        fputs(qPrintable(indent % tr("Slot ") % QString::number((*img_mgmt_get_state_images)[i].slot_list[c].slot) % newline), stdout);
+                        fputs(qPrintable(indent % indent % tr("Hash: ") % (*img_mgmt_get_state_images)[i].slot_list[c].hash % newline), stdout);
+                        fputs(qPrintable(indent % indent % tr("Version: ") % (*img_mgmt_get_state_images)[i].slot_list[c].version % newline), stdout);
 
                         if ((*img_mgmt_get_state_images)[i].slot_list[c].active == true)
                         {
-                            fputs(qPrintable(tr("\t\t- Active") % "\n"), stdout);
+                            fputs(qPrintable(indent % indent %tr("- Active") % newline), stdout);
                         }
 
                         if ((*img_mgmt_get_state_images)[i].slot_list[c].bootable == true)
                         {
-                            fputs(qPrintable(tr("\t\t- Bootable") % "\n"), stdout);
+                            fputs(qPrintable(indent % indent % tr("- Bootable") % newline), stdout);
                         }
 
                         if ((*img_mgmt_get_state_images)[i].slot_list[c].confirmed == true)
                         {
-                            fputs(qPrintable(tr("\t\t- Confirmed") % "\n"), stdout);
+                            fputs(qPrintable(indent % indent % tr("- Confirmed") % newline), stdout);
                         }
 
                         if ((*img_mgmt_get_state_images)[i].slot_list[c].pending == true)
                         {
-                            fputs(qPrintable(tr("\t\t- Pending") % "\n"), stdout);
+                            fputs(qPrintable(indent % indent % tr("- Pending") % newline), stdout);
                         }
 
                         if ((*img_mgmt_get_state_images)[i].slot_list[c].permanent == true)
                         {
-                            fputs(qPrintable(tr("\t\t- Permanent") % "\n"), stdout);
+                            fputs(qPrintable(indent % indent % tr("- Permanent") % newline), stdout);
                         }
 
                         if ((*img_mgmt_get_state_images)[i].slot_list[c].splitstatus == true)
                         {
-                            fputs(qPrintable(tr("\t\t- Split image") % "\n"), stdout);
+                            fputs(qPrintable(indent % indent % tr("- Split image") % newline), stdout);
                         }
 
                         ++c;
@@ -1454,22 +1643,22 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                     uint8_t m = (*img_mgmt_slot_info_images)[i].slot_data.length();
                     QString field_size;
 
-                    fputs(qPrintable(tr("Image ") % QString::number((*img_mgmt_slot_info_images)[i].image) % "\n"), stdout);
+                    fputs(qPrintable(tr("Image ") % QString::number((*img_mgmt_slot_info_images)[i].image) % newline), stdout);
 
                     while (c < m)
                     {
-                        fputs(qPrintable(tr("\tSlot ") % QString::number((*img_mgmt_slot_info_images)[i].slot_data[c].slot) % "\n"), stdout);
+                        fputs(qPrintable(indent % tr("Slot ") % QString::number((*img_mgmt_slot_info_images)[i].slot_data[c].slot) % newline), stdout);
 
                         if ((*img_mgmt_slot_info_images)[i].slot_data[c].size_present == true)
                         {
                             size_abbreviation((*img_mgmt_slot_info_images)[i].slot_data[c].size, &field_size);
-                            fputs(qPrintable(tr("\t\tSize: ") % field_size % "\n"), stdout);
+                            fputs(qPrintable(indent % indent % tr("Size: ") % field_size % newline), stdout);
                             field_size.clear();
                         }
 
                         if ((*img_mgmt_slot_info_images)[i].slot_data[c].upload_image_id_present == true)
                         {
-                            fputs(qPrintable(tr("\t\tUpload image ID: ") % QString::number((*img_mgmt_slot_info_images)[i].slot_data[c].upload_image_id) % "\n"), stdout);
+                            fputs(qPrintable(indent % indent % tr("Upload image ID: ") % QString::number((*img_mgmt_slot_info_images)[i].slot_data[c].upload_image_id) % newline), stdout);
                         }
 
                         ++c;
@@ -1478,7 +1667,7 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                     if ((*img_mgmt_slot_info_images)[i].max_image_size_present == true)
                     {
                         size_abbreviation((*img_mgmt_slot_info_images)[i].max_image_size, &field_size);
-                        fputs(qPrintable(tr("\tMax image size: ") % field_size % "\n"), stdout);
+                        fputs(qPrintable(indent % tr("Max image size: ") % field_size % newline), stdout);
                         field_size.clear();
                     }
 
