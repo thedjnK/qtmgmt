@@ -69,6 +69,6 @@ contains(CONFIG, static) {
     win32: LIBS += -L$$DESTDIR -lplugin_mcumgr.dll
     else: LIBS += -L$$DESTDIR -l:plugin_mcumgr.so
 
-    win32-g++: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.dll
-    else: PRE_TARGETDEPS += $$DESTDIR/libplugin_mcumgr.so
+    win32-g++: PRE_TARGETDEPS += $$DESTDIR/plugin_mcumgr.dll
+    else: PRE_TARGETDEPS += $$DESTDIR/plugin_mcumgr.so
 }
