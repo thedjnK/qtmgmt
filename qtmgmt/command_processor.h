@@ -153,19 +153,19 @@ private:
 
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
     void add_transport_options_uart(QList<entry_t> *entries);
-    int configure_transport_options_uart(smp_uart *transport, QCommandLineParser *parser);
+    int configure_transport_options_uart(smp_transport *transport, QCommandLineParser *parser);
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
     void add_transport_options_bluetooth(QList<entry_t> *entries);
-    int configure_transport_options_bluetooth(smp_bluetooth *transport, QCommandLineParser *parser);
+    int configure_transport_options_bluetooth(smp_transport *transport, QCommandLineParser *parser);
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
     void add_transport_options_udp(QList<entry_t> *entries);
-    int configure_transport_options_udp(smp_udp *transport, QCommandLineParser *parser);
+    int configure_transport_options_udp(smp_transport *transport, QCommandLineParser *parser);
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
     void add_transport_options_lorawan(QList<entry_t> *entries);
-    int configure_transport_options_lorawan(smp_lorawan *transport, QCommandLineParser *parser);
+    int configure_transport_options_lorawan(smp_transport *transport, QCommandLineParser *parser);
 #endif
 
     void add_group_options_enum(QList<entry_t> *entries, QString command);
@@ -221,7 +221,19 @@ private:
     bool smp_v2;
     uint16_t smp_mtu;
 
+    //Enumeration management
+    uint16_t enum_mgmt_count;
+    QList<uint16_t> *enum_mgmt_group_ids;
+    uint16_t enum_mgmt_id;
+    bool enum_mgmt_end;
+    QList<enum_details_t> *enum_mgmt_group_details;
+    enum_fields_present_t enum_mgmt_group_fields_present;
+
     //OS management
+    uint32_t os_mgmt_mcumgr_parameters_buffer_size;
+    uint32_t os_mgmt_mcumgr_parameters_buffer_count;
+    QString *os_mgmt_os_application_info_response;
+    QVariant *os_mgmt_bootloader_info_response;
 
     //Image management
     QList<image_state_t> *img_mgmt_get_state_images;
@@ -246,6 +258,7 @@ private:
     typedef void (command_processor::*add_group_options_t)(QList<entry_t> *entries, QString command);
     typedef int (command_processor::*run_group_t)(QCommandLineParser *parser, QString command);
     typedef void (command_processor::*add_transport_options_t)(QList<entry_t> *entries);
+    typedef int (command_processor::*configure_transport_options_t)(smp_transport *transport, QCommandLineParser *parser);
 
     struct supported_command_t {
         QString name;
@@ -255,6 +268,7 @@ private:
     struct supported_group_t {
         QString name;
         QStringList arguments;
+        uint16_t group_id;
         smp_group *group;
         add_group_options_t options_function;
         run_group_t run_function;
@@ -266,11 +280,12 @@ private:
         QStringList arguments;
         smp_transport *transport;
         add_transport_options_t options_function;
+        configure_transport_options_t configure_function;
     };
 
     const QList<supported_group_t> supported_groups = {
 #if 0
-        {"Enumeration management", {"enumeration", "enum"}, group_enum, &command_processor::add_group_options_enum, &command_processor::run_group_enum,
+        {"Enumeration management", {"enumeration", "enum"}, SMP_GROUP_ID_ENUM, group_enum, &command_processor::add_group_options_enum, &command_processor::run_group_enum,
             {
                 {"Number of supported groups", {"count"}},
                 {"List supported groups", {"list"}},
@@ -278,7 +293,7 @@ private:
                 {"Get details of supported groups", {"details"}}
             }
         },
-        {"Filesystem management", {"filesystem", "fs"}, group_fs, &command_processor::add_group_options_fs, &command_processor::run_group_fs,
+        {"Filesystem management", {"filesystem", "fs"}, SMP_GROUP_ID_FS, group_fs, &command_processor::add_group_options_fs, &command_processor::run_group_fs,
             {
                 {"Upload file to device", {"upload"}},
                 {"Download file from device", {"download"}},
@@ -289,7 +304,7 @@ private:
             }
         },
 #endif
-        {"Image management", {"image", "img"}, group_img, &command_processor::add_group_options_img, &command_processor::run_group_img,
+        {"Image management", {"image", "img"}, SMP_GROUP_ID_IMG, group_img, &command_processor::add_group_options_img, &command_processor::run_group_img,
             {
                {"Get image state(s)", {"get-state"}},
                {"Set image state", {"set-state"}},
@@ -298,7 +313,7 @@ private:
                {"Get information on slots", {"slot-info"}}
             }
         },
-        {"Operating system management", {"os"}, group_os, &command_processor::add_group_options_os, &command_processor::run_group_os,
+        {"Operating system management", {"os"}, SMP_GROUP_ID_OS, group_os, &command_processor::add_group_options_os, &command_processor::run_group_os,
              {
                 {"Echo text back", {"echo"}},
 #if 0
@@ -316,25 +331,25 @@ private:
             }
         }
 #if 0
-        {"Settings management", {"settings"}, group_settings, &command_processor::add_group_options_settings}, &command_processor::run_group_settings,
-        {"Shell management", {"shell"}, group_shell, &command_processor::add_group_options_shell}, &command_processor::run_group_shell,
-        {"Statistics management", {"statistics", "stats"}, group_stat, &command_processor::add_group_options_stat}, &command_processor::run_group_stat,
-        {"Zephyr basic management", {"zephyr"}, group_zephyr, &command_processor::add_group_options_zephyr}, &command_processor::run_group_zephyr,
+        {"Settings management", {"settings"}, SMP_GROUP_ID_SETTINGS, group_settings, &command_processor::add_group_options_settings}, &command_processor::run_group_settings,
+        {"Shell management", {"shell"}, SMP_GROUP_ID_SHELL, group_shell, &command_processor::add_group_options_shell}, &command_processor::run_group_shell,
+        {"Statistics management", {"statistics", "stats"}, SMP_GROUP_ID_STATS, group_stat, &command_processor::add_group_options_stat}, &command_processor::run_group_stat,
+        {"Zephyr basic management", {"zephyr"}, SMP_GROUP_ID_ZEPHYR, group_zephyr, &command_processor::add_group_options_zephyr}, &command_processor::run_group_zephyr,
 #endif
     };
 
     const QList<supported_transport_t> supported_transports = {
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
-        {"UART transport", {"uart", "serial"}, transport_uart, &command_processor::add_transport_options_uart},
+        {"UART transport", {"uart", "serial"}, transport_uart, &command_processor::add_transport_options_uart, &command_processor::configure_transport_options_uart},
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
-        {"Bluetooth Low Energy transport", {"bluetooth", "bt"}, transport_bluetooth, &command_processor::add_transport_options_bluetooth},
+        {"Bluetooth Low Energy transport", {"bluetooth", "bt"}, transport_bluetooth, &command_processor::add_transport_options_bluetooth, &command_processor::configure_transport_options_bluetooth},
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
-        {"UDP transport", {"udp"}, transport_udp, &command_processor::add_transport_options_udp},
+        {"UDP transport", {"udp"}, transport_udp, &command_processor::add_transport_options_udp, &command_processor::configure_transport_options_udp},
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
-        {"LoRaWAN (TTS/MQTT) transport", {"lorawan"}, transport_lorawan, &command_processor::add_transport_options_lorawan},
+        {"LoRaWAN (TTS/MQTT) transport", {"lorawan"}, transport_lorawan, &command_processor::add_transport_options_lorawan, &command_processor::configure_transport_options_lorawan},
 #endif
     };
 };

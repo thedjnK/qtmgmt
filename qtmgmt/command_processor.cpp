@@ -99,7 +99,7 @@ const QString value_command_img_slot_info = "slot-info";
 
 //Enumeration management group
 const QCommandLineOption option_command_enum_index("index", "Index (0-based)", "index");
-const QCommandLineOption option_command_enum_groups("groups", "List of groups (comma separated)", "groups");
+//const QCommandLineOption option_command_enum_groups("groups", "List of groups (comma separated)", "groups");
 
 //Filesystem management group
 const QCommandLineOption option_command_fs_local_file("local-file", "Local PC file", "filename");
@@ -154,7 +154,10 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
     mode = ACTION_IDLE;
     smp_v2 = true;
     smp_mtu = 256;
+    os_mgmt_os_application_info_response = nullptr;
+    os_mgmt_bootloader_info_response = nullptr;
     img_mgmt_get_state_images = nullptr;
+    img_mgmt_slot_info_images = nullptr;
 
     //Execute run function in event loop so that QCoreApplication::exit() works
     QTimer::singleShot(0, this, SLOT(run()));
@@ -162,6 +165,7 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
 
 command_processor::~command_processor()
 {
+#if 0
     if (transport_uart != nullptr)
     {
         if (transport_uart->is_connected() == 1)
@@ -172,6 +176,19 @@ command_processor::~command_processor()
         delete transport_uart;
         transport_uart = nullptr;
     }
+#endif
+
+    if (os_mgmt_os_application_info_response != nullptr)
+    {
+        delete os_mgmt_os_application_info_response;
+        os_mgmt_os_application_info_response = nullptr;
+    }
+
+    if (os_mgmt_bootloader_info_response != nullptr)
+    {
+        delete os_mgmt_bootloader_info_response;
+        os_mgmt_bootloader_info_response = nullptr;
+    }
 
     if (img_mgmt_get_state_images != nullptr)
     {
@@ -179,8 +196,31 @@ command_processor::~command_processor()
         img_mgmt_get_state_images = nullptr;
     }
 
+    if (img_mgmt_slot_info_images != nullptr)
+    {
+        delete img_mgmt_slot_info_images;
+        img_mgmt_slot_info_images = nullptr;
+    }
+
+    if (active_group != nullptr)
+    {
+        disconnect(active_group, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
+        disconnect(active_group, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
+        active_group = nullptr;
+    }
+
     if (active_transport != nullptr)
     {
+        disconnect(active_transport, SIGNAL(connected()), this, SLOT(transport_connected()));
+        disconnect(active_transport, SIGNAL(disconnected()), this, SLOT(transport_disconnected()));
+        disconnect(active_transport, SIGNAL(receive_waiting(smp_message*)), processor, SLOT(message_received(smp_message*)));
+
+        if (active_transport->is_connected() == 1)
+        {
+            active_transport->disconnect(true);
+        }
+
+        delete active_transport;
         active_transport = nullptr;
     }
 
@@ -246,11 +286,7 @@ void command_processor::run()
     const QCommandLineOption option_transport("transport", "MCUmgr transport", "type");
     const QCommandLineOption option_group("group", "MCUmgr group", "type");
     const QCommandLineOption option_command("command", "MCUmgr group command", "command");
-    const QCommandLineOption option_help(QStringList()
-#ifdef Q_OS_WIN
-                                             << "?"
-#endif
-                                             << "h" << "help", "Show help for provided options");
+    const QCommandLineOption option_help(QStringList() << "h" << "help", "Show contextual help for provided options");
     const QCommandLineOption option_help_all("help-all", "Show all help of every possible option");
     const QCommandLineOption option_help_transports("help-transports", "Show all help of all transports");
     const QCommandLineOption option_help_groups("help-groups", "Show all help of all groups");
@@ -263,6 +299,7 @@ void command_processor::run()
     uint8_t l;
     bool failed = false;
     QEventLoop wait_loop;
+    uint16_t active_group_index = 0;
 
     parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
     parser.addOption(option_help);
@@ -488,6 +525,7 @@ void command_processor::run()
             if (supported_groups[i].arguments.indexOf(user_group) != -1)
             {
                 (this->*supported_groups[i].options_function)(&entries, parser.value(option_command));
+                active_group_index = i;
                 break;
             }
 
@@ -676,8 +714,6 @@ void command_processor::run()
     {
         transport_uart = new smp_uart(this);
         active_transport = transport_uart;
-
-        exit_code = configure_transport_options_uart(transport_uart, &parser);
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
@@ -685,8 +721,6 @@ void command_processor::run()
     {
         transport_bluetooth = new smp_bluetooth(this);
         active_transport = transport_bluetooth;
-
-        exit_code = configure_transport_options_bluetooth(transport_bluetooth, &parser);
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
@@ -694,8 +728,6 @@ void command_processor::run()
     {
         transport_udp = new smp_udp(this);
         active_transport = transport_udp;
-
-        exit_code = configure_transport_options_udp(transport_udp, &parser);
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
@@ -703,10 +735,10 @@ void command_processor::run()
     {
         transport_lorawan = new smp_lorawan(this);
         active_transport = transport_lorawan;
-
-        exit_code = configure_transport_options_lorawan(transport_lorawan, &parser);
     }
 #endif
+
+    exit_code = (this->*supported_transports[0].configure_function)(active_transport, &parser);
 
     if (exit_code != EXIT_CODE_SUCCESS)
     {
@@ -741,67 +773,66 @@ void command_processor::run()
     connect(active_transport, SIGNAL(receive_waiting(smp_message*)), processor, SLOT(message_received(smp_message*)));
     //connect(processor, SIGNAL(custom_message_callback(custom_message_callback_t,smp_error_t*)), this, SLOT(custom_message_callback(custom_message_callback_t,smp_error_t*)));
 
-    if (0)
+    switch (supported_groups[active_group_index].group_id)
     {
-    }
-    else if (user_group == value_group_enum)
-    {
-        group_enum = new smp_group_enum_mgmt(processor);
-        active_group = group_enum;
-    }
-    else if (user_group == value_group_fs)
-    {
-        group_fs = new smp_group_fs_mgmt(processor);
-        active_group = group_fs;
-    }
-    else if (user_group == value_group_os)
-    {
-        group_os = new smp_group_os_mgmt(processor);
-        active_group = group_os;
-    }
-    else if (user_group == value_group_settings)
-    {
-        group_settings = new smp_group_settings_mgmt(processor);
-        active_group = group_settings;
-    }
-    else if (user_group == value_group_shell)
-    {
-        group_shell = new smp_group_shell_mgmt(processor);
-        active_group = group_shell;
-    }
-    else if (user_group == value_group_stat)
-    {
-        group_stat = new smp_group_stat_mgmt(processor);
-        active_group = group_stat;
-    }
-    else if (user_group == value_group_zephyr)
-    {
-        group_zephyr = new smp_group_zephyr_mgmt(processor);
-        active_group = group_zephyr;
-    }
-    else if (user_group == value_group_img)
-    {
-        group_img = new smp_group_img_mgmt(processor);
-        active_group = group_img;
-    }
-
-    i = 0;
-    l = supported_groups.length();
-
-    while (i < l)
-    {
-        if (supported_groups[i].arguments.indexOf(user_group) != -1)
+        case SMP_GROUP_ID_ENUM:
+        {
+            group_enum = new smp_group_enum_mgmt(processor);
+            active_group = group_enum;
+            break;
+        }
+        case SMP_GROUP_ID_FS:
+        {
+            group_fs = new smp_group_fs_mgmt(processor);
+            active_group = group_fs;
+            break;
+        }
+        case SMP_GROUP_ID_IMG:
+        {
+            group_img = new smp_group_img_mgmt(processor);
+            active_group = group_img;
+            break;
+        }
+        case SMP_GROUP_ID_OS:
+        {
+            group_os = new smp_group_os_mgmt(processor);
+            active_group = group_os;
+            break;
+        }
+        case SMP_GROUP_ID_SETTINGS:
+        {
+            group_settings = new smp_group_settings_mgmt(processor);
+            active_group = group_settings;
+            break;
+        }
+        case SMP_GROUP_ID_SHELL:
+        {
+            group_shell = new smp_group_shell_mgmt(processor);
+            active_group = group_shell;
+            break;
+        }
+        case SMP_GROUP_ID_STATS:
+        {
+            group_stat = new smp_group_stat_mgmt(processor);
+            active_group = group_stat;
+            break;
+        }
+        case SMP_GROUP_ID_ZEPHYR:
+        {
+            group_zephyr = new smp_group_zephyr_mgmt(processor);
+            active_group = group_zephyr;
+            break;
+        }
+        default:
         {
             break;
         }
-
-        ++i;
-    }
+    };
 
     connect(active_group, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
     connect(active_group, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
 
-    exit_code = (this->*supported_groups[i].run_function)(&parser, parser.value(option_command));
+    exit_code = (this->*supported_groups[active_group_index].run_function)(&parser, parser.value(option_command));
 
     if (exit_code != EXIT_CODE_SUCCESS)
     {
@@ -820,7 +851,7 @@ void command_processor::add_transport_options_uart(QList<entry_t> *entries)
     entries->append({{&option_transport_uart_stop_bits}, false, false});
 }
 
-int command_processor::configure_transport_options_uart(smp_uart *transport, QCommandLineParser *parser)
+int command_processor::configure_transport_options_uart(smp_transport *transport, QCommandLineParser *parser)
 {
     struct smp_uart_config_t uart_configuration;
 
@@ -949,8 +980,7 @@ int command_processor::configure_transport_options_uart(smp_uart *transport, QCo
         uart_configuration.stop_bits = SMP_UART_STOP_BITS_1;
     }
 
-    transport->set_connection_config(&uart_configuration);
-
+    static_cast<smp_uart *>(transport)->set_connection_config(&uart_configuration);
     return EXIT_CODE_SUCCESS;
 }
 #endif
@@ -963,7 +993,7 @@ void command_processor::add_transport_options_bluetooth(QList<entry_t> *entries)
     entries->append({{&option_transport_bluetooth_address}, false, false});
 }
 
-int command_processor::configure_transport_options_bluetooth(smp_bluetooth *transport, QCommandLineParser *parser)
+int command_processor::configure_transport_options_bluetooth(smp_transport *transport, QCommandLineParser *parser)
 {
     struct smp_bluetooth_config_t bluetooth_configuration;
 
@@ -978,8 +1008,7 @@ int command_processor::configure_transport_options_bluetooth(smp_bluetooth *tran
         bluetooth_configuration.type = SMP_BLUETOOTH_CONNECT_TYPE_ADDRESS;
     }
 
-    transport->set_connection_config(&bluetooth_configuration);
-
+    static_cast<smp_bluetooth *>(transport)->set_connection_config(&bluetooth_configuration);
     return EXIT_CODE_SUCCESS;
 }
 #endif
@@ -991,7 +1020,7 @@ void command_processor::add_transport_options_udp(QList<entry_t> *entries)
     entries->append({{&option_transport_udp_port}, false, false});
 }
 
-int command_processor::configure_transport_options_udp(smp_udp *transport, QCommandLineParser *parser)
+int command_processor::configure_transport_options_udp(smp_transport *transport, QCommandLineParser *parser)
 {
     struct smp_udp_config_t udp_configuration;
 
@@ -1013,8 +1042,7 @@ int command_processor::configure_transport_options_udp(smp_udp *transport, QComm
         udp_configuration.port = default_transport_udp_port;
     }
 
-    transport->set_connection_config(&udp_configuration);
-
+    static_cast<smp_udp *>(transport)->set_connection_config(&udp_configuration);
     return EXIT_CODE_SUCCESS;
 }
 #endif
@@ -1031,7 +1059,7 @@ void command_processor::add_transport_options_lorawan(QList<entry_t> *entries)
     entries->append({{&option_transport_lorawan_frame_port}, true, false});
 }
 
-int command_processor::configure_transport_options_lorawan(smp_lorawan *transport, QCommandLineParser *parser)
+int command_processor::configure_transport_options_lorawan(smp_transport *transport, QCommandLineParser *parser)
 {
     struct smp_lorawan_config_t lorawan_configuration;
     bool converted = false;
@@ -1084,8 +1112,7 @@ int command_processor::configure_transport_options_lorawan(smp_lorawan *transpor
         return EXIT_CODE_NUMERIAL_ARGUMENT_CONVERSION_FAILED;
     }
 
-    transport->set_connection_config(&lorawan_configuration);
-
+    static_cast<smp_lorawan *>(transport)->set_connection_config(&lorawan_configuration);
     return EXIT_CODE_SUCCESS;
 }
 #endif
@@ -1111,7 +1138,7 @@ void command_processor::add_group_options_enum(QList<entry_t> *entries, QString 
     else if (command == value_command_enum_details)
     {
         //groups (array)
-        entries->append({{&option_command_enum_groups}, true, false});
+        //entries->append({{&option_command_enum_groups}, true, false});
     }
 }
 
@@ -1264,6 +1291,40 @@ void command_processor::add_group_options_img(QList<entry_t> *entries, QString c
 int command_processor::run_group_enum(QCommandLineParser *parser, QString command)
 {
     //TODO
+    if (command == value_command_enum_count)
+    {
+        mode = ACTION_ENUM_COUNT;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_enum->start_enum_count(&enum_mgmt_count);
+    }
+    else if (command == value_command_enum_list)
+    {
+        enum_mgmt_group_ids = new QList<uint16_t>();
+        mode = ACTION_ENUM_LIST;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_enum->start_enum_list(enum_mgmt_group_ids);
+    }
+    else if (command == value_command_enum_single)
+    {
+        mode = ACTION_ENUM_SINGLE;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_enum->start_enum_single(parser->value(option_command_enum_index).toUInt(), &enum_mgmt_id, &enum_mgmt_end);
+    }
+    else if (command == value_command_enum_details)
+    {
+        enum_mgmt_group_details = new QList<enum_details_t>;
+        mode = ACTION_ENUM_DETAILS;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_enum->start_enum_details(enum_mgmt_group_details, &enum_mgmt_group_fields_present);
+    }
+
+
+//const QCommandLineOption option_command_enum_groups("groups", "List of groups (comma separated)", "groups");
+
     return EXIT_CODE_SUCCESS;
 }
 
@@ -1286,10 +1347,18 @@ int command_processor::run_group_os(QCommandLineParser *parser, QString command)
     else if (command == value_command_os_tasks)
     {
         //TODO
+        mode = ACTION_OS_TASK_STATS;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+//        group_os->start_task_stats();
     }
     else if (command == value_command_os_memory)
     {
         //TODO
+        mode = ACTION_OS_MEMORY_POOL;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+//        group_os->start_memory_pool();
     }
     else if (command == value_command_os_reset)
     {
@@ -1301,29 +1370,46 @@ int command_processor::run_group_os(QCommandLineParser *parser, QString command)
     }
     else if (command == value_command_os_mcumgr_parameters)
     {
-        //TODO
+        mode = ACTION_OS_MCUMGR_BUFFER;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_os->start_mcumgr_parameters(&os_mgmt_mcumgr_parameters_buffer_size, &os_mgmt_mcumgr_parameters_buffer_count);
     }
     else if (command == value_command_os_application_info)
     {
-        //TODO
         //format
-        //option_command_os_format
+        os_mgmt_os_application_info_response = new QString();
+        mode = ACTION_OS_OS_APPLICATION_INFO;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_os->start_os_application_info((parser->isSet(option_command_os_format) == true ? parser->value(option_command_os_format) : ""), os_mgmt_os_application_info_response);
     }
     else if (command == value_command_os_get_date_time)
     {
         //TODO
+        mode = ACTION_OS_DATETIME_GET;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+//        group_os->start_date_time_get();
     }
     else if (command == value_command_os_set_date_time)
     {
         //TODO
         //datetime
         //option_command_os_datetime
+        mode = ACTION_OS_DATETIME_SET;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+//        group_os->start_date_time_set();
     }
     else if (command == value_command_os_bootloader_info)
     {
-        //TODO
         //query
-        //option_command_os_query
+        os_mgmt_bootloader_info_response = new QVariant();
+        mode = ACTION_OS_BOOTLOADER_INFO;
+        processor->set_transport(active_transport);
+        set_group_transport_settings(active_group);
+        group_os->start_bootloader_info((parser->isSet(option_command_os_query) == true ? parser->value(option_command_os_query) : ""), os_mgmt_bootloader_info_response);
     }
 
     return EXIT_CODE_SUCCESS;
@@ -1767,74 +1853,67 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
                 table_OS_Tasks->setSortingEnabled(true);
             }
+#endif
             else if (user_data == ACTION_OS_MCUMGR_BUFFER)
             {
-                edit_OS_Info_Output->clear();
-                edit_OS_Info_Output->appendPlainText(error_string);
-                error_string = nullptr;
+                log_information() << "Buffer size: " << os_mgmt_mcumgr_parameters_buffer_size << ", buffer count: " << os_mgmt_mcumgr_parameters_buffer_count;
             }
             else if (user_data == ACTION_OS_OS_APPLICATION_INFO)
             {
-                edit_OS_Info_Output->clear();
-                edit_OS_Info_Output->appendPlainText(error_string);
-                error_string = nullptr;
+                log_information() << os_mgmt_os_application_info_response;
+                delete os_mgmt_os_application_info_response;
+                os_mgmt_os_application_info_response = nullptr;
             }
             else if (user_data == ACTION_OS_BOOTLOADER_INFO)
             {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-                switch (bootloader_info_response.typeId())
+                switch (os_mgmt_bootloader_info_response->typeId())
 #else
-                switch (bootloader_info_response.type())
+                switch (os_mgmt_bootloader_info_response->type())
 #endif
                 {
-                case QMetaType::Bool:
-                {
-                    edit_os_bootloader_response->setText(bootloader_info_response.toBool() == true ? "True" : "False");
-                    break;
-                }
-
-                case QMetaType::Int:
-                {
-                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toInt()));
-                    break;
-                }
-
-                case QMetaType::LongLong:
-                {
-                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toLongLong()));
-                    break;
-                }
-
-                case QMetaType::UInt:
-                {
-                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toUInt()));
-                    break;
-                }
-
-                case QMetaType::ULongLong:
-                {
-                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toULongLong()));
-                    break;
-                }
-
-                case QMetaType::Double:
-                {
-                    edit_os_bootloader_response->setText(QString::number(bootloader_info_response.toDouble()));
-                    break;
-                }
-
-                case QMetaType::QString:
-                {
-                    edit_os_bootloader_response->setText(bootloader_info_response.toString());
-                    break;
-                }
-
-                default:
-                {
-                    error_string = "Invalid";
-                }
-                }
+                    case QMetaType::Bool:
+                    {
+                        log_information() << (os_mgmt_bootloader_info_response->toBool() == true ? "True" : "False");
+                        break;
+                    }
+                    case QMetaType::Int:
+                    {
+                        log_information() << os_mgmt_bootloader_info_response->toInt();
+                        break;
+                    }
+                    case QMetaType::LongLong:
+                    {
+                        log_information() << os_mgmt_bootloader_info_response->toLongLong();
+                        break;
+                    }
+                    case QMetaType::UInt:
+                    {
+                        log_information() << os_mgmt_bootloader_info_response->toUInt();
+                        break;
+                    }
+                    case QMetaType::ULongLong:
+                    {
+                        log_information() << os_mgmt_bootloader_info_response->toULongLong();
+                        break;
+                    }
+                    case QMetaType::Double:
+                    {
+                        log_information() << os_mgmt_bootloader_info_response->toDouble();
+                        break;
+                    }
+                    case QMetaType::QString:
+                    {
+                        log_information() << os_mgmt_bootloader_info_response->toString();
+                        break;
+                    }
+                    default:
+                    {
+                        log_information() << "Invalid response type";
+                    }
+                };
             }
+#if 0
             else if (user_data == ACTION_OS_DATETIME_GET)
             {
                 int index;
@@ -1854,6 +1933,17 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             {
             }
 #endif
+        }
+
+        if (user_data == ACTION_OS_OS_APPLICATION_INFO)
+        {
+            delete os_mgmt_os_application_info_response;
+            os_mgmt_os_application_info_response = nullptr;
+        }
+        else if (user_data == ACTION_OS_BOOTLOADER_INFO)
+        {
+            delete os_mgmt_bootloader_info_response;
+            os_mgmt_bootloader_info_response = nullptr;
         }
     }
 #if 0
@@ -2008,99 +2098,66 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
         {
         }
     }
+#endif
     else if (sender() == group_enum)
     {
         log_debug() << "enum sender";
-        label_status = lbl_enum_status;
 
-        if (user_data == ACTION_ENUM_COUNT)
+        if (status == STATUS_COMPLETE)
         {
-            edit_Enum_Count->setText(QString::number(enum_count));
-        }
-        else if (user_data == ACTION_ENUM_LIST)
-        {
-            uint16_t i = 0;
-            uint16_t l = table_Enum_List_Details->rowCount();
+            log_debug() << "complete";
 
-            table_Enum_List_Details->setSortingEnabled(false);
-
-            while (i < enum_groups.length())
+            if (user_data == ACTION_ENUM_COUNT)
             {
-                if (i >= l)
-                {
-                    table_Enum_List_Details->insertRow(i);
+                log_information() << enum_mgmt_count;
+            }
+            else if (user_data == ACTION_ENUM_LIST)
+            {
+                QString groups;
+                uint8_t i = 0;
+                uint8_t l = enum_mgmt_group_ids->length();
 
-                    QTableWidgetItem *row_id = new QTableWidgetItem(QString::number(enum_groups[i]));
-                    QTableWidgetItem *row_name = new QTableWidgetItem("");
-                    QTableWidgetItem *row_handlers = new QTableWidgetItem("");
-
-                    table_Enum_List_Details->setItem(i, 0, row_id);
-                    table_Enum_List_Details->setItem(i, 1, row_name);
-                    table_Enum_List_Details->setItem(i, 2, row_handlers);
-                }
-                else
+                while (i < l)
                 {
-                    table_Enum_List_Details->item(i, 0)->setText(QString::number(enum_groups[i]));
-                    table_Enum_List_Details->item(i, 1)->setText("");
-                    table_Enum_List_Details->item(i, 2)->setText("");
+                    groups.append(QString::number(enum_mgmt_group_ids->at(i)));
+                    ++i;
+
+                    if (i < l)
+                    {
+                        groups.append(", ");
+                    }
                 }
 
-                ++i;
+                log_information() << groups;
             }
-
-            while (i < l)
+            else if (user_data == ACTION_ENUM_SINGLE)
             {
-                table_Enum_List_Details->removeRow((table_Enum_List_Details->rowCount() - 1));
-                ++i;
+                log_information() << enum_mgmt_id << ", " << (enum_mgmt_end == true ? "at end" : "more groups present");
             }
+            else if (user_data == ACTION_ENUM_DETAILS)
+            {
+                uint16_t i = 0;
+                uint16_t l = (*enum_mgmt_group_details).length();
 
-            table_Enum_List_Details->setSortingEnabled(true);
+                while (i < l)
+                {
+                    log_information() << "ID " << (*enum_mgmt_group_details)[i].id << "(" << (*enum_mgmt_group_details)[i].name << ")" << " with " << (*enum_mgmt_group_details)[i].handlers << " handlers";
+                    ++i;
+                }
+            }
         }
-        else if (user_data == ACTION_ENUM_SINGLE)
+
+        if (user_data == ACTION_ENUM_LIST)
         {
-            edit_Enum_Count->setText(QString("ID: ").append(QString::number(enum_single_id)).append(", end: ").append(QString::number(enum_single_end)));
+            delete enum_mgmt_group_ids;
+            enum_mgmt_group_ids = nullptr;
         }
         else if (user_data == ACTION_ENUM_DETAILS)
         {
-            uint16_t i = 0;
-            uint16_t l = table_Enum_List_Details->rowCount();
-
-            table_Enum_List_Details->setSortingEnabled(false);
-
-            while (i < enum_details.length())
-            {
-                if (i >= l)
-                {
-                    table_Enum_List_Details->insertRow(i);
-
-                    QTableWidgetItem *row_id = new QTableWidgetItem(QString::number(enum_details[i].id));
-                    QTableWidgetItem *row_name = new QTableWidgetItem(enum_details[i].name);
-                    QTableWidgetItem *row_handlers = new QTableWidgetItem(QString::number(enum_details[i].handlers));
-
-                    table_Enum_List_Details->setItem(i, 0, row_id);
-                    table_Enum_List_Details->setItem(i, 1, row_name);
-                    table_Enum_List_Details->setItem(i, 2, row_handlers);
-                }
-                else
-                {
-                    table_Enum_List_Details->item(i, 0)->setText(QString::number(enum_details[i].id));
-                    table_Enum_List_Details->item(i, 1)->setText(enum_details[i].name);
-                    table_Enum_List_Details->item(i, 2)->setText(QString::number(enum_details[i].handlers));
-                }
-
-                ++i;
-            }
-
-            while (i < l)
-            {
-                table_Enum_List_Details->removeRow((table_Enum_List_Details->rowCount() - 1));
-                ++i;
-            }
-
-            table_Enum_List_Details->setSortingEnabled(true);
+            delete enum_mgmt_group_details;
+            enum_mgmt_group_details = nullptr;
         }
     }
-#endif
 
     if (finished == true)
     {
