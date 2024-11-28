@@ -351,18 +351,16 @@ private:
                 {"Get details of supported groups", {"details"}, nullptr, &command_processor::run_group_enum_command_details}
             }
         },
-#if 0
         {"Filesystem management", {"filesystem", "fs"}, SMP_GROUP_ID_FS, group_fs,
             {
-                {"Upload file to device", {"upload"}},
-                {"Download file from device", {"download"}},
-                {"Get file status", {"status"}},
-                {"Get hash/checksum of file", {"hash", "checksum", "hash-checksum"}},
-                {"Get a list of supported hashes/checksums", {"supported-hashes", "supported-checksums", "supported-hashes-checksums"}},
-                {"Close open file", {"close"}}
+                {"Upload file to device", {"upload"}, &command_processor::add_group_fs_command_upload_download, &command_processor::run_group_fs_command_upload},
+                {"Download file from device", {"download"}, &command_processor::add_group_fs_command_upload_download, &command_processor::run_group_fs_command_download},
+                {"Get file status", {"status"}, &command_processor::add_group_fs_command_status, &command_processor::run_group_fs_command_status},
+                {"Get hash/checksum of file", {"hash", "checksum", "hash-checksum"}, &command_processor::add_group_fs_command_hash_checksum, &command_processor::run_group_fs_command_hash_checksum},
+                {"Get a list of supported hashes/checksums", {"supported-hashes", "supported-checksums", "supported-hashes-checksums"}, nullptr, &command_processor::run_group_fs_command_supported_hashes_checksums},
+                {"Close open file", {"close"}, nullptr, &command_processor::run_group_fs_command_close_file}
             }
         },
-#endif
         {"Image management", {"image", "img"}, SMP_GROUP_ID_IMG, group_img,
             {
                {"Get image state(s)", {"get-state"}, nullptr, &command_processor::run_group_img_command_get_state},
