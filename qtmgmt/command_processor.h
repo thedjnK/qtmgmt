@@ -85,6 +85,7 @@ enum mcumgr_action_t {
     ACTION_FS_STATUS,
     ACTION_FS_HASH_CHECKSUM,
     ACTION_FS_SUPPORTED_HASHES_CHECKSUMS,
+    ACTION_FS_CLOSE_FILE,
 
     ACTION_SETTINGS_READ,
     ACTION_SETTINGS_WRITE,
@@ -109,10 +110,12 @@ enum exit_code_t {
     EXIT_CODE_UNKNOWN_ARGUMENTS_PROVIDED = -2,
     EXIT_CODE_INVALID_TRANSPORT = -3,
     EXIT_CODE_INVALID_GROUP = -4,
-    EXIT_CODE_NUMERIAL_ARGUMENT_CONVERSION_FAILED = -5,
-    EXIT_CODE_NUMERIAL_ARGUMENT_OUT_OF_RANGE = -6,
-    EXIT_CODE_ARGUMENT_VALUE_NOT_VALID = -7,
-    EXIT_CODE_TRANSPORT_OPEN_FAILED = -8,
+    EXIT_CODE_INVALID_COMMAND = -5,
+    EXIT_CODE_NUMERIAL_ARGUMENT_CONVERSION_FAILED = -6,
+    EXIT_CODE_NUMERIAL_ARGUMENT_OUT_OF_RANGE = -7,
+    EXIT_CODE_ARGUMENT_VALUE_NOT_VALID = -8,
+    EXIT_CODE_TRANSPORT_OPEN_FAILED = -9,
+    EXIT_CODE_TODO_AA,
 };
 
 enum image_upload_mode_t {
@@ -168,24 +171,6 @@ private:
     int configure_transport_options_lorawan(smp_transport *transport, QCommandLineParser *parser);
 #endif
 
-    void add_group_options_enum(QList<entry_t> *entries, QString command);
-    void add_group_options_fs(QList<entry_t> *entries, QString command);
-    void add_group_options_os(QList<entry_t> *entries, QString command);
-    void add_group_options_settings(QList<entry_t> *entries, QString command);
-    void add_group_options_shell(QList<entry_t> *entries, QString command);
-    void add_group_options_stat(QList<entry_t> *entries, QString command);
-    void add_group_options_zephyr(QList<entry_t> *entries, QString command);
-    void add_group_options_img(QList<entry_t> *entries, QString command);
-
-    int run_group_enum(QCommandLineParser *parser, QString command);
-    int run_group_fs(QCommandLineParser *parser, QString command);
-    int run_group_os(QCommandLineParser *parser, QString command);
-    int run_group_settings(QCommandLineParser *parser, QString command);
-    int run_group_shell(QCommandLineParser *parser, QString command);
-    int run_group_stat(QCommandLineParser *parser, QString command);
-    int run_group_zephyr(QCommandLineParser *parser, QString command);
-    int run_group_img(QCommandLineParser *parser, QString command);
-
     void set_group_transport_settings(smp_group *group);
     void set_group_transport_settings(smp_group *group, uint32_t timeout);
 
@@ -229,11 +214,18 @@ private:
     QList<enum_details_t> *enum_mgmt_group_details;
     enum_fields_present_t enum_mgmt_group_fields_present;
 
+    //Filesystem management
+    uint32_t fs_mgmt_file_size;
+    QByteArray *fs_mgmt_hash_checksum;
+    QList<hash_checksum_t> *fs_mgmt_supported_hashes_checksums;
+
     //OS management
     uint32_t os_mgmt_mcumgr_parameters_buffer_size;
     uint32_t os_mgmt_mcumgr_parameters_buffer_count;
     QString *os_mgmt_os_application_info_response;
     QVariant *os_mgmt_bootloader_info_response;
+    QList<task_list_t> *os_mgmt_task_list;
+    QList<memory_pool_t> *os_mgmt_memory_pool;
 
     //Image management
     QList<image_state_t> *img_mgmt_get_state_images;
@@ -241,6 +233,9 @@ private:
     enum image_upload_mode_t upload_mode;
     QByteArray upload_hash;
     bool upload_reset;
+
+    //Shell management
+    int32_t shell_mgmt_rc;
 
     const QString value_transport_uart = "uart";
     const QString value_transport_bluetooth = "bluetooth";
@@ -255,14 +250,80 @@ private:
     const uint16_t default_transport_lorawan_port = 1883;
     const uint16_t default_transport_lorawan_port_ssl = 8883;
 
-    typedef void (command_processor::*add_group_options_t)(QList<entry_t> *entries, QString command);
-    typedef int (command_processor::*run_group_t)(QCommandLineParser *parser, QString command);
     typedef void (command_processor::*add_transport_options_t)(QList<entry_t> *entries);
     typedef int (command_processor::*configure_transport_options_t)(smp_transport *transport, QCommandLineParser *parser);
+    typedef void (command_processor::*add_command_t)(QList<entry_t> *entries);
+    typedef int (command_processor::*run_command_t)(QCommandLineParser *parser);
+
+    //Enumeration management
+    int run_group_enum_command_count(QCommandLineParser *parser);
+    int run_group_enum_command_list(QCommandLineParser *parser);
+    void add_group_enum_command_single(QList<entry_t> *entries);
+    int run_group_enum_command_single(QCommandLineParser *parser);
+    //void add_group_enum_command_details(QList<entry_t> *entries);
+    int run_group_enum_command_details(QCommandLineParser *parser);
+
+    //Filesystem management
+    void add_group_fs_command_upload_download(QList<entry_t> *entries);
+    int run_group_fs_command_upload(QCommandLineParser *parser);
+    int run_group_fs_command_download(QCommandLineParser *parser);
+    void add_group_fs_command_status(QList<entry_t> *entries);
+    int run_group_fs_command_status(QCommandLineParser *parser);
+    void add_group_fs_command_hash_checksum(QList<entry_t> *entries);
+    int run_group_fs_command_hash_checksum(QCommandLineParser *parser);
+    int run_group_fs_command_supported_hashes_checksums(QCommandLineParser *parser);
+    int run_group_fs_command_close_file(QCommandLineParser *parser);
+
+    //Settings management
+    //void add_group_settings_command_(QList<entry_t> *entries);
+    //int run_group_settings_command_(QCommandLineParser *parser);
+
+    //Shell management
+    void add_group_shell_command_execute(QList<entry_t> *entries);
+    int run_group_shell_command_execute(QCommandLineParser *parser);
+
+    //Statistics management
+    //void add_group_stats_command_(QList<entry_t> *entries);
+    //int run_group_stats_command_(QCommandLineParser *parser);
+
+    //Zephyr basic management
+    //void add_group_zephyr_command_(QList<entry_t> *entries);
+    //int run_group_zephyr_command_(QCommandLineParser *parser);
+
+    //OS management
+    void add_group_os_command_echo(QList<entry_t> *entries);
+    int run_group_os_command_echo(QCommandLineParser *parser);
+    int run_group_os_command_task_list(QCommandLineParser *parser);
+    int run_group_os_command_memory_pool(QCommandLineParser *parser);
+    void add_group_os_command_reset(QList<entry_t> *entries);
+    int run_group_os_command_reset(QCommandLineParser *parser);
+    int run_group_os_command_mcumgr_parameters(QCommandLineParser *parser);
+    void add_group_os_command_application_information(QList<entry_t> *entries);
+    int run_group_os_command_application_information(QCommandLineParser *parser);
+    int run_group_os_command_get_time_and_date(QCommandLineParser *parser);
+    void add_group_os_command_set_time_and_date(QList<entry_t> *entries);
+    int run_group_os_command_set_time_and_date(QCommandLineParser *parser);
+    void add_group_os_command_bootloader_information(QList<entry_t> *entries);
+    int run_group_os_command_bootloader_information(QCommandLineParser *parser);
+
+    //Image management
+    int run_group_img_command_get_state(QCommandLineParser *parser);
+    void add_group_img_command_set_state(QList<entry_t> *entries);
+    int run_group_img_command_set_state(QCommandLineParser *parser);
+    void add_group_img_command_upload(QList<entry_t> *entries);
+    int run_group_img_command_upload(QCommandLineParser *parser);
+    void add_group_img_command_erase_slot(QList<entry_t> *entries);
+    int run_group_img_command_erase_slot(QCommandLineParser *parser);
+    int run_group_img_command_slot_info(QCommandLineParser *parser);
+
+    //void add_group_os_command_(QList<entry_t> *entries);
+    //int run_group_os_command_(QCommandLineParser *parser);
 
     struct supported_command_t {
         QString name;
         QStringList arguments;
+        add_command_t add_function;
+        run_command_t run_function;
     };
 
     struct supported_group_t {
@@ -270,8 +331,6 @@ private:
         QStringList arguments;
         uint16_t group_id;
         smp_group *group;
-        add_group_options_t options_function;
-        run_group_t run_function;
         QList<supported_command_t> commands;
     };
 
@@ -284,16 +343,16 @@ private:
     };
 
     const QList<supported_group_t> supported_groups = {
-#if 0
-        {"Enumeration management", {"enumeration", "enum"}, SMP_GROUP_ID_ENUM, group_enum, &command_processor::add_group_options_enum, &command_processor::run_group_enum,
+        {"Enumeration management", {"enumeration", "enum"}, SMP_GROUP_ID_ENUM, group_enum,
             {
-                {"Number of supported groups", {"count"}},
-                {"List supported groups", {"list"}},
-                {"Get information on one supported group", {"single"}},
-                {"Get details of supported groups", {"details"}}
+                {"Number of supported groups", {"count"}, nullptr, &command_processor::run_group_enum_command_count},
+                {"List supported groups", {"list"}, nullptr, &command_processor::run_group_enum_command_list},
+                {"Get information on one supported group", {"single"}, &command_processor::add_group_enum_command_single, &command_processor::run_group_enum_command_single},
+                {"Get details of supported groups", {"details"}, nullptr, &command_processor::run_group_enum_command_details}
             }
         },
-        {"Filesystem management", {"filesystem", "fs"}, SMP_GROUP_ID_FS, group_fs, &command_processor::add_group_options_fs, &command_processor::run_group_fs,
+#if 0
+        {"Filesystem management", {"filesystem", "fs"}, SMP_GROUP_ID_FS, group_fs,
             {
                 {"Upload file to device", {"upload"}},
                 {"Download file from device", {"download"}},
@@ -304,35 +363,37 @@ private:
             }
         },
 #endif
-        {"Image management", {"image", "img"}, SMP_GROUP_ID_IMG, group_img, &command_processor::add_group_options_img, &command_processor::run_group_img,
+        {"Image management", {"image", "img"}, SMP_GROUP_ID_IMG, group_img,
             {
-               {"Get image state(s)", {"get-state"}},
-               {"Set image state", {"set-state"}},
-               {"Upload firmware update", {"upload"}},
-               {"Erase slot", {"erase"}},
-               {"Get information on slots", {"slot-info"}}
+               {"Get image state(s)", {"get-state"}, nullptr, &command_processor::run_group_img_command_get_state},
+               {"Set image state", {"set-state"}, &command_processor::add_group_img_command_set_state, &command_processor::run_group_img_command_set_state},
+               {"Upload firmware update", {"upload"}, &command_processor::add_group_img_command_upload, &command_processor::run_group_img_command_upload},
+               {"Erase slot", {"erase"}, &command_processor::add_group_img_command_erase_slot, &command_processor::run_group_img_command_erase_slot},
+               {"Get information on slots", {"slot-info"}, nullptr, &command_processor::run_group_img_command_slot_info}
             }
         },
-        {"Operating system management", {"os"}, SMP_GROUP_ID_OS, group_os, &command_processor::add_group_options_os, &command_processor::run_group_os,
+        {"Operating system management", {"os"}, SMP_GROUP_ID_OS, group_os,
              {
-                {"Echo text back", {"echo"}},
-#if 0
-                {"List running tasks/threads", {"tasks"}},
-                {"Get memory pool details", {"memory"}},
-#endif
-                {"Reset device", {"reset"}},
-#if 0
-                {"Get supported MCUmgr parameters", {"mcumgr-parameters"}},
-                {"Get application information", {"application-info"}},
-                {"Get the device time and date", {"get-date-time"}},
-                {"Set the device time and date", {"set-date-time"}},
-                {"Get information on bootloader", {"bootloader-info"}}
-#endif
+                {"Echo text back", {"echo"}, &command_processor::add_group_os_command_echo, &command_processor::run_group_os_command_echo},
+                {"List running tasks/threads", {"tasks", "task-list"}, nullptr, &command_processor::run_group_os_command_task_list},
+                {"Get memory pool details", {"memory", "memory-pool"}, nullptr, &command_processor::run_group_os_command_memory_pool},
+                {"Reset device", {"reset"}, &command_processor::add_group_os_command_reset, &command_processor::run_group_os_command_reset},
+                {"Get supported MCUmgr parameters", {"mcumgr-parameters"}, nullptr, &command_processor::run_group_os_command_mcumgr_parameters},
+                {"Get application information", {"application-info"}, &command_processor::add_group_os_command_application_information, &command_processor::run_group_os_command_application_information},
+                {"Get the device time and date", {"get-date-time"}, nullptr, &command_processor::run_group_os_command_get_time_and_date},
+                {"Set the device time and date", {"set-date-time"}, &command_processor::add_group_os_command_set_time_and_date, &command_processor::run_group_os_command_set_time_and_date},
+                {"Get information on bootloader", {"bootloader-info"}, &command_processor::add_group_os_command_bootloader_information, &command_processor::run_group_os_command_bootloader_information}
             }
-        }
+        },
 #if 0
         {"Settings management", {"settings"}, SMP_GROUP_ID_SETTINGS, group_settings, &command_processor::add_group_options_settings}, &command_processor::run_group_settings,
-        {"Shell management", {"shell"}, SMP_GROUP_ID_SHELL, group_shell, &command_processor::add_group_options_shell}, &command_processor::run_group_shell,
+#endif
+        {"Shell management", {"shell"}, SMP_GROUP_ID_SHELL, group_shell,
+            {
+                {"Execute command", {"execute"}, &command_processor::add_group_shell_command_execute, &command_processor::run_group_shell_command_execute},
+            }
+        },
+#if 0
         {"Statistics management", {"statistics", "stats"}, SMP_GROUP_ID_STATS, group_stat, &command_processor::add_group_options_stat}, &command_processor::run_group_stat,
         {"Zephyr basic management", {"zephyr"}, SMP_GROUP_ID_ZEPHYR, group_zephyr, &command_processor::add_group_options_zephyr}, &command_processor::run_group_zephyr,
 #endif

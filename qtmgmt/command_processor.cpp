@@ -54,15 +54,6 @@ const QCommandLineOption option_transport_lorawan_password("password", "LoRaWAN 
 const QCommandLineOption option_transport_lorawan_topic("topic", "LoRaWAN MQTT topic", "topic");
 const QCommandLineOption option_transport_lorawan_frame_port("frame-port", "LoRaWAN frame port", "port");
 
-const QString value_group_enum = "enum";
-const QString value_group_fs = "fs";
-const QString value_group_os = "os";
-const QString value_group_settings = "settings";
-const QString value_group_shell = "shell";
-const QString value_group_stat = "stat";
-const QString value_group_zephyr = "zephyr";
-const QString value_group_img = "img";
-
 //const QString value_command_img_ = "";
 const QString value_command_enum_count = "count";
 const QString value_command_enum_list = "list";
@@ -92,8 +83,9 @@ const QString value_command_img_upload = "upload";
 const QString value_command_img_erase = "erase";
 const QString value_command_img_slot_info = "slot-info";
 
+const QString value_command_shell_execute = "execute";
+
 //const QString value_command_settings_ = "";
-//const QString value_command_shell_ = "";
 //const QString value_command_stat_ = "";
 //const QString value_command_zephyr_ = "";
 
@@ -122,6 +114,9 @@ const QCommandLineOption option_command_img_image("image", "Image number", "imag
 const QCommandLineOption option_command_img_file("file", "Firmware update", "file");
 const QCommandLineOption option_command_img_upgrade("upgrade", "Only accept upgrades");
 const QCommandLineOption option_command_img_slot("slot", "Slot number", "slot");
+
+//Shell management group
+const QCommandLineOption option_command_shell_command("command2", "Command to execute", "command");
 
 //SMP options
 const QCommandLineOption option_mtu("mtu", "MTU (default: 256, can be: 96-16384)", "mtu");
@@ -154,8 +149,14 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
     mode = ACTION_IDLE;
     smp_v2 = true;
     smp_mtu = 256;
+    enum_mgmt_group_ids = nullptr;
+    enum_mgmt_group_details = nullptr;
+    fs_mgmt_hash_checksum = nullptr;
+    fs_mgmt_supported_hashes_checksums = nullptr;
     os_mgmt_os_application_info_response = nullptr;
     os_mgmt_bootloader_info_response = nullptr;
+    os_mgmt_task_list = nullptr;
+    os_mgmt_memory_pool = nullptr;
     img_mgmt_get_state_images = nullptr;
     img_mgmt_slot_info_images = nullptr;
 
@@ -178,6 +179,30 @@ command_processor::~command_processor()
     }
 #endif
 
+    if (enum_mgmt_group_ids != nullptr)
+    {
+        delete enum_mgmt_group_ids;
+        enum_mgmt_group_ids = nullptr;
+    }
+
+    if (enum_mgmt_group_details != nullptr)
+    {
+        delete enum_mgmt_group_details;
+        enum_mgmt_group_details = nullptr;
+    }
+
+    if (fs_mgmt_hash_checksum != nullptr)
+    {
+        delete fs_mgmt_hash_checksum;
+        fs_mgmt_hash_checksum = nullptr;
+    }
+
+    if (fs_mgmt_supported_hashes_checksums != nullptr)
+    {
+        delete fs_mgmt_supported_hashes_checksums;
+        fs_mgmt_supported_hashes_checksums = nullptr;
+    }
+
     if (os_mgmt_os_application_info_response != nullptr)
     {
         delete os_mgmt_os_application_info_response;
@@ -188,6 +213,18 @@ command_processor::~command_processor()
     {
         delete os_mgmt_bootloader_info_response;
         os_mgmt_bootloader_info_response = nullptr;
+    }
+
+    if (os_mgmt_task_list != nullptr)
+    {
+        delete os_mgmt_task_list;
+        os_mgmt_task_list = nullptr;
+    }
+
+    if (os_mgmt_memory_pool != nullptr)
+    {
+        delete os_mgmt_memory_pool;
+        os_mgmt_memory_pool = nullptr;
     }
 
     if (img_mgmt_get_state_images != nullptr)
@@ -295,11 +332,14 @@ void command_processor::run()
     int exit_code = EXIT_CODE_SUCCESS;
     QString user_transport;
     QString user_group;
+    QString user_command;
     uint8_t i;
     uint8_t l;
     bool failed = false;
     QEventLoop wait_loop;
+    uint16_t active_transport_index = 0;
     uint16_t active_group_index = 0;
+    uint16_t active_command_index = 0;
 
     parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
     parser.addOption(option_help);
@@ -428,7 +468,11 @@ void command_processor::run()
                     uint8_t l3;
                     QList<entry_t> command_entry;
 
-                    (this->*supported_groups[i].options_function)(&command_entry, supported_groups[i].commands[i2].arguments.first());
+                    if (supported_groups[i].commands[i2].add_function != nullptr)
+                    {
+                        (this->*supported_groups[i].commands[i2].add_function)(&command_entry);
+                    }
+
                     fputs(qPrintable(indent % indent % indent % supported_groups[i].commands[i2].name % ":" % newline % indent % indent % indent % indent % "--command " % supported_groups[i].commands[i2].arguments.join(" or --command ") % newline), stdout);
                     l3 = command_entry.length();
 
@@ -499,6 +543,7 @@ void command_processor::run()
             if (supported_transports[i].arguments.indexOf(user_transport) != -1)
             {
                 (this->*supported_transports[i].options_function)(&entries);
+                active_transport_index = i;
                 break;
             }
 
@@ -524,7 +569,37 @@ void command_processor::run()
         {
             if (supported_groups[i].arguments.indexOf(user_group) != -1)
             {
-                (this->*supported_groups[i].options_function)(&entries, parser.value(option_command));
+                if (parser.isSet(option_command))
+                {
+                    uint8_t i2 = 0;
+                    uint8_t l2 = supported_groups[i].commands.length();
+
+                    user_command = parser.value(option_command);
+
+                    while (i2 < l2)
+                    {
+                        if (supported_groups[i].commands[i2].arguments.indexOf(user_command) != -1)
+                        {
+                            if (supported_groups[i].commands[i2].add_function != nullptr)
+                            {
+                                (this->*supported_groups[i].commands[i2].add_function)(&entries);
+                            }
+
+                            active_command_index = i2;
+                            break;
+                        }
+
+                        ++i2;
+                    }
+
+                    if (i2 == l2)
+                    {
+                        fputs(qPrintable(tr("Error: invalid command specified")), stdout);
+                        QCoreApplication::exit(EXIT_CODE_INVALID_COMMAND);
+                        return;
+                    }
+                }
+
                 active_group_index = i;
                 break;
             }
@@ -738,7 +813,7 @@ void command_processor::run()
     }
 #endif
 
-    exit_code = (this->*supported_transports[0].configure_function)(active_transport, &parser);
+    exit_code = (this->*supported_transports[active_transport_index].configure_function)(active_transport, &parser);
 
     if (exit_code != EXIT_CODE_SUCCESS)
     {
@@ -832,7 +907,10 @@ void command_processor::run()
     connect(active_group, SIGNAL(status(uint8_t,group_status,QString)), this, SLOT(status(uint8_t,group_status,QString)));
     connect(active_group, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
 
-    exit_code = (this->*supported_groups[active_group_index].run_function)(&parser, parser.value(option_command));
+    processor->set_transport(active_transport);
+    set_group_transport_settings(active_group);
+
+    exit_code = (this->*supported_groups[active_group_index].commands[active_command_index].run_function)(&parser);
 
     if (exit_code != EXIT_CODE_SUCCESS)
     {
@@ -1117,379 +1195,437 @@ int command_processor::configure_transport_options_lorawan(smp_transport *transp
 }
 #endif
 
-void command_processor::add_group_options_enum(QList<entry_t> *entries, QString command)
+//HERE
+int command_processor::run_group_enum_command_count(QCommandLineParser *parser)
 {
-    if (command.length() == 0)
+    mode = ACTION_ENUM_COUNT;
+
+    if (group_enum->start_enum_count(&enum_mgmt_count) == true)
     {
-        return;
+        return EXIT_CODE_SUCCESS;
     }
 
-    if (command == value_command_enum_count)
-    {
-    }
-    else if (command == value_command_enum_list)
-    {
-    }
-    else if (command == value_command_enum_single)
-    {
-        //index
-        entries->append({{&option_command_enum_index}, true, false});
-    }
-    else if (command == value_command_enum_details)
-    {
-        //groups (array)
-        //entries->append({{&option_command_enum_groups}, true, false});
-    }
+    return EXIT_CODE_TODO_AA;
 }
 
-void command_processor::add_group_options_fs(QList<entry_t> *entries, QString command)
+int command_processor::run_group_enum_command_list(QCommandLineParser *parser)
 {
-    if (command.length() == 0)
+    enum_mgmt_group_ids = new QList<uint16_t>();
+    mode = ACTION_ENUM_LIST;
+
+    if (group_enum->start_enum_list(enum_mgmt_group_ids) == true)
     {
-        return;
+        return EXIT_CODE_SUCCESS;
     }
 
-    if (command == value_command_fs_upload || command == value_command_fs_download)
-    {
-        //local file, remote file
-        entries->append({{&option_command_fs_local_file}, true, false});
-        entries->append({{&option_command_fs_remote_file}, true, false});
-    }
-    else if (command == value_command_fs_status)
-    {
-        //remote file
-        entries->append({{&option_command_fs_remote_file}, true, false});
-    }
-    else if (value_command_fs_hash_checksum.contains(command))
-    {
-        //remote file, hash/checksum
-        entries->append({{&option_command_fs_remote_file}, true, false});
-        entries->append({{&option_command_fs_hash_checksum}, true, false});
-    }
-    else if (value_command_fs_supported_hashes_checksums.contains(command))
-    {
-    }
-    else if (command == value_command_fs_close)
-    {
-    }
+    return EXIT_CODE_TODO_AA;
 }
 
-void command_processor::add_group_options_os(QList<entry_t> *entries, QString command)
+void command_processor::add_group_enum_command_single(QList<entry_t> *entries)
 {
-    if (command.length() == 0)
-    {
-        return;
-    }
-
-    if (command == value_command_os_echo)
-    {
-        //data
-        entries->append({{&option_command_os_data}, true, false});
-    }
-    else if (command == value_command_os_tasks)
-    {
-    }
-    else if (command == value_command_os_memory)
-    {
-    }
-    else if (command == value_command_os_reset)
-    {
-        //force
-        entries->append({{&option_command_os_force}, false, false});
-    }
-    else if (command == value_command_os_mcumgr_parameters)
-    {
-    }
-    else if (command == value_command_os_application_info)
-    {
-        //format
-        entries->append({{&option_command_os_format}, false, false});
-    }
-    else if (command == value_command_os_get_date_time)
-    {
-    }
-    else if (command == value_command_os_set_date_time)
-    {
-        //datetime
-        entries->append({{&option_command_os_datetime}, true, false});
-    }
-    else if (command == value_command_os_bootloader_info)
-    {
-        //query
-        entries->append({{&option_command_os_query}, false, false});
-    }
+    //index
+    entries->append({{&option_command_enum_index}, true, false});
 }
 
-void command_processor::add_group_options_settings(QList<entry_t> *entries, QString command)
+int command_processor::run_group_enum_command_single(QCommandLineParser *parser)
 {
-    if (command.length() == 0)
+    mode = ACTION_ENUM_SINGLE;
+
+    if (group_enum->start_enum_single(parser->value(option_command_enum_index).toUInt(), &enum_mgmt_id, &enum_mgmt_end) == true)
     {
-        return;
+        return EXIT_CODE_SUCCESS;
     }
+
+    return EXIT_CODE_TODO_AA;
 }
 
-void command_processor::add_group_options_shell(QList<entry_t> *entries, QString command)
-{
-    if (command.length() == 0)
-    {
-        return;
-    }
-}
-
-void command_processor::add_group_options_stat(QList<entry_t> *entries, QString command)
-{
-    if (command.length() == 0)
-    {
-        return;
-    }
-}
-
-void command_processor::add_group_options_zephyr(QList<entry_t> *entries, QString command)
-{
-    if (command.length() == 0)
-    {
-        return;
-    }
-}
-
-void command_processor::add_group_options_img(QList<entry_t> *entries, QString command)
-{
-    if (command.length() == 0)
-    {
-        return;
-    }
-
-    if (command == value_command_img_get_state)
-    {
-    }
-    else if (command == value_command_img_set_state)
-    {
-        //hash, confirm
-//TODO: need to check if supplied parameters are valid
-        entries->append({{&option_command_img_hash}, false, false});
-        entries->append({{&option_command_img_confirm}, false, false});
-    }
-    else if (command == value_command_img_upload)
-    {
-        //image, file, upgrade, test/confirm, reset
-        entries->append({{&option_command_img_image}, false, false});
-        entries->append({{&option_command_img_file}, true, false});
-        entries->append({{&option_command_img_upgrade}, false, false});
-        entries->append({{&option_command_img_test, &option_command_img_confirm}, false, true});
-        entries->append({{&option_command_img_reset}, false, false});
-    }
-    else if (command == value_command_img_erase)
-    {
-        //slot
-        entries->append({{&option_command_img_slot}, true, false});
-    }
-    else if (command == value_command_img_slot_info)
-    {
-    }
-}
-
-int command_processor::run_group_enum(QCommandLineParser *parser, QString command)
-{
-    //TODO
-    if (command == value_command_enum_count)
-    {
-        mode = ACTION_ENUM_COUNT;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_enum->start_enum_count(&enum_mgmt_count);
-    }
-    else if (command == value_command_enum_list)
-    {
-        enum_mgmt_group_ids = new QList<uint16_t>();
-        mode = ACTION_ENUM_LIST;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_enum->start_enum_list(enum_mgmt_group_ids);
-    }
-    else if (command == value_command_enum_single)
-    {
-        mode = ACTION_ENUM_SINGLE;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_enum->start_enum_single(parser->value(option_command_enum_index).toUInt(), &enum_mgmt_id, &enum_mgmt_end);
-    }
-    else if (command == value_command_enum_details)
-    {
-        enum_mgmt_group_details = new QList<enum_details_t>;
-        mode = ACTION_ENUM_DETAILS;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_enum->start_enum_details(enum_mgmt_group_details, &enum_mgmt_group_fields_present);
-    }
-
-
+//void command_processor::add_group_enum_command_details(QList<entry_t> *entries)
+//{
+//groups (array)
+//entries->append({{&option_command_enum_groups}, true, false});
 //const QCommandLineOption option_command_enum_groups("groups", "List of groups (comma separated)", "groups");
+//}
 
-    return EXIT_CODE_SUCCESS;
+int command_processor::run_group_enum_command_details(QCommandLineParser *parser)
+{
+    enum_mgmt_group_details = new QList<enum_details_t>;
+    mode = ACTION_ENUM_DETAILS;
+
+    if (group_enum->start_enum_details(enum_mgmt_group_details, &enum_mgmt_group_fields_present) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
 }
 
-int command_processor::run_group_fs(QCommandLineParser *parser, QString command)
+//WORKING
+void command_processor::add_group_fs_command_upload_download(QList<entry_t> *entries)
+{
+    //local file, remote file
+    entries->append({{&option_command_fs_local_file}, true, false});
+    entries->append({{&option_command_fs_remote_file}, true, false});
+}
+
+int command_processor::run_group_fs_command_upload(QCommandLineParser *parser)
 {
     //TODO
-    return EXIT_CODE_SUCCESS;
+    mode = ACTION_FS_UPLOAD;
+
+    if (group_fs->start_upload(parser->value(option_command_fs_local_file), parser->value(option_command_fs_remote_file)) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
 }
 
-int command_processor::run_group_os(QCommandLineParser *parser, QString command)
-{
-    if (command == value_command_os_echo)
-    {
-        //data
-        mode = ACTION_OS_ECHO;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_os->start_echo(parser->value(option_command_os_data));
-    }
-    else if (command == value_command_os_tasks)
-    {
-        //TODO
-        mode = ACTION_OS_TASK_STATS;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-//        group_os->start_task_stats();
-    }
-    else if (command == value_command_os_memory)
-    {
-        //TODO
-        mode = ACTION_OS_MEMORY_POOL;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-//        group_os->start_memory_pool();
-    }
-    else if (command == value_command_os_reset)
-    {
-        //force
-        mode = ACTION_OS_RESET;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_os->start_reset(parser->isSet(option_command_os_force));
-    }
-    else if (command == value_command_os_mcumgr_parameters)
-    {
-        mode = ACTION_OS_MCUMGR_BUFFER;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_os->start_mcumgr_parameters(&os_mgmt_mcumgr_parameters_buffer_size, &os_mgmt_mcumgr_parameters_buffer_count);
-    }
-    else if (command == value_command_os_application_info)
-    {
-        //format
-        os_mgmt_os_application_info_response = new QString();
-        mode = ACTION_OS_OS_APPLICATION_INFO;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_os->start_os_application_info((parser->isSet(option_command_os_format) == true ? parser->value(option_command_os_format) : ""), os_mgmt_os_application_info_response);
-    }
-    else if (command == value_command_os_get_date_time)
-    {
-        //TODO
-        mode = ACTION_OS_DATETIME_GET;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-//        group_os->start_date_time_get();
-    }
-    else if (command == value_command_os_set_date_time)
-    {
-        //TODO
-        //datetime
-        //option_command_os_datetime
-        mode = ACTION_OS_DATETIME_SET;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-//        group_os->start_date_time_set();
-    }
-    else if (command == value_command_os_bootloader_info)
-    {
-        //query
-        os_mgmt_bootloader_info_response = new QVariant();
-        mode = ACTION_OS_BOOTLOADER_INFO;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_os->start_bootloader_info((parser->isSet(option_command_os_query) == true ? parser->value(option_command_os_query) : ""), os_mgmt_bootloader_info_response);
-    }
-
-    return EXIT_CODE_SUCCESS;
-}
-
-int command_processor::run_group_settings(QCommandLineParser *parser, QString command)
+int command_processor::run_group_fs_command_download(QCommandLineParser *parser)
 {
     //TODO
-    return EXIT_CODE_SUCCESS;
+    mode = ACTION_FS_DOWNLOAD;
+
+    if (group_fs->start_download(parser->value(option_command_fs_remote_file), parser->value(option_command_fs_local_file)) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
 }
 
-int command_processor::run_group_shell(QCommandLineParser *parser, QString command)
+void command_processor::add_group_fs_command_status(QList<entry_t> *entries)
+{
+    //remote file
+    entries->append({{&option_command_fs_remote_file}, true, false});
+}
+
+int command_processor::run_group_fs_command_status(QCommandLineParser *parser)
 {
     //TODO
-    return EXIT_CODE_SUCCESS;
+    mode = ACTION_FS_STATUS;
+
+    if (group_fs->start_status(parser->value(option_command_fs_remote_file), &fs_mgmt_file_size) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
 }
 
-int command_processor::run_group_stat(QCommandLineParser *parser, QString command)
+void command_processor::add_group_fs_command_hash_checksum(QList<entry_t> *entries)
+{
+    //remote file, hash/checksum
+    entries->append({{&option_command_fs_remote_file}, true, false});
+//TODO: optional?
+    entries->append({{&option_command_fs_hash_checksum}, true, false});
+}
+
+int command_processor::run_group_fs_command_hash_checksum(QCommandLineParser *parser)
 {
     //TODO
-    return EXIT_CODE_SUCCESS;
+    fs_mgmt_hash_checksum = new QByteArray();
+    mode = ACTION_FS_HASH_CHECKSUM;
+
+//TODO: optional?
+    if (group_fs->start_hash_checksum(parser->value(option_command_fs_remote_file), parser->value(option_command_fs_hash_checksum), fs_mgmt_hash_checksum, &fs_mgmt_file_size) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
 }
 
-int command_processor::run_group_zephyr(QCommandLineParser *parser, QString command)
+int command_processor::run_group_fs_command_supported_hashes_checksums(QCommandLineParser *parser)
 {
     //TODO
-    return EXIT_CODE_SUCCESS;
+    fs_mgmt_supported_hashes_checksums = new QList<hash_checksum_t>();
+    mode = ACTION_FS_SUPPORTED_HASHES_CHECKSUMS;
+
+    if (group_fs->start_supported_hashes_checksums(fs_mgmt_supported_hashes_checksums) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
 }
 
-int command_processor::run_group_img(QCommandLineParser *parser, QString command)
+int command_processor::run_group_fs_command_close_file(QCommandLineParser *parser)
 {
-    if (command == value_command_img_get_state)
-    {
-        mode = ACTION_IMG_IMAGE_LIST;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        img_mgmt_get_state_images = new QList<image_state_t>();
-        group_img->start_image_get(img_mgmt_get_state_images);
-    }
-    else if (command == value_command_img_set_state)
-    {
-        QByteArray hash;
+    mode = ACTION_FS_CLOSE_FILE;
 
-        if (parser->isSet(option_command_img_hash))
-        {
-            hash = QByteArray::fromHex(parser->value(option_command_img_hash).toLatin1());
-        }
-
-        mode = ACTION_IMG_IMAGE_SET;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_img->start_image_set((parser->isSet(option_command_img_hash) ? &hash : nullptr), (parser->isSet(option_command_img_confirm) ? true : false), nullptr);
-    }
-    else if (command == value_command_img_upload)
+    if (group_fs->start_file_close() == true)
     {
-        mode = ACTION_IMG_UPLOAD;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        upload_mode = (parser->isSet(option_command_img_test) == true ? IMAGE_UPLOAD_MODE_TEST : (parser->isSet(option_command_img_confirm) == true ? IMAGE_UPLOAD_MODE_CONFIRM : IMAGE_UPLOAD_MODE_NORMAL));
-        upload_reset = parser->isSet(option_command_img_reset);
-        group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &upload_hash);
-    }
-    else if (command == value_command_img_erase)
-    {
-        mode = ACTION_IMG_IMAGE_ERASE;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        group_img->start_image_erase(parser->value(option_command_img_slot).toUInt());
-    }
-    else if (command == value_command_img_slot_info)
-    {
-        //TODO
-        mode = ACTION_IMG_IMAGE_SLOT_INFO;
-        processor->set_transport(active_transport);
-        set_group_transport_settings(active_group);
-        img_mgmt_slot_info_images = new QList<slot_info_t>();
-        group_img->start_image_slot_info(img_mgmt_slot_info_images);
+        return EXIT_CODE_SUCCESS;
     }
 
-    return EXIT_CODE_SUCCESS;
+    return EXIT_CODE_TODO_AA;
+}
+
+int command_processor::run_group_img_command_get_state(QCommandLineParser *parser)
+{
+    img_mgmt_get_state_images = new QList<image_state_t>();
+    mode = ACTION_IMG_IMAGE_LIST;
+
+    if (group_img->start_image_get(img_mgmt_get_state_images) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_img_command_set_state(QList<entry_t> *entries)
+{
+    //hash, confirm
+    //TODO: need to check if supplied parameters are valid
+    entries->append({{&option_command_img_hash}, false, false});
+    entries->append({{&option_command_img_confirm}, false, false});
+}
+
+int command_processor::run_group_img_command_set_state(QCommandLineParser *parser)
+{
+    QByteArray hash;
+
+    if (parser->isSet(option_command_img_hash))
+    {
+        hash = QByteArray::fromHex(parser->value(option_command_img_hash).toLatin1());
+    }
+
+    mode = ACTION_IMG_IMAGE_SET;
+
+    if (group_img->start_image_set((parser->isSet(option_command_img_hash) ? &hash : nullptr), (parser->isSet(option_command_img_confirm) ? true : false), nullptr) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_img_command_upload(QList<entry_t> *entries)
+{
+    //image, file, upgrade, test/confirm, reset
+    entries->append({{&option_command_img_image}, false, false});
+    entries->append({{&option_command_img_file}, true, false});
+    entries->append({{&option_command_img_upgrade}, false, false});
+    entries->append({{&option_command_img_test, &option_command_img_confirm}, false, true});
+    entries->append({{&option_command_img_reset}, false, false});
+}
+
+int command_processor::run_group_img_command_upload(QCommandLineParser *parser)
+{
+    mode = ACTION_IMG_UPLOAD;
+    upload_mode = (parser->isSet(option_command_img_test) == true ? IMAGE_UPLOAD_MODE_TEST : (parser->isSet(option_command_img_confirm) == true ? IMAGE_UPLOAD_MODE_CONFIRM : IMAGE_UPLOAD_MODE_NORMAL));
+    upload_reset = parser->isSet(option_command_img_reset);
+
+    if (group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &upload_hash) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_img_command_erase_slot(QList<entry_t> *entries)
+{
+    //slot
+    entries->append({{&option_command_img_slot}, true, false});
+}
+
+int command_processor::run_group_img_command_erase_slot(QCommandLineParser *parser)
+{
+    mode = ACTION_IMG_IMAGE_ERASE;
+
+    if (group_img->start_image_erase(parser->value(option_command_img_slot).toUInt()) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+int command_processor::run_group_img_command_slot_info(QCommandLineParser *parser)
+{
+    //TODO
+    img_mgmt_slot_info_images = new QList<slot_info_t>();
+    mode = ACTION_IMG_IMAGE_SLOT_INFO;
+
+    if (group_img->start_image_slot_info(img_mgmt_slot_info_images) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_os_command_echo(QList<entry_t> *entries)
+{
+    //data
+    entries->append({{&option_command_os_data}, true, false});
+}
+
+int command_processor::run_group_os_command_echo(QCommandLineParser *parser)
+{
+    //data
+    mode = ACTION_OS_ECHO;
+
+    if (group_os->start_echo(parser->value(option_command_os_data)) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+int command_processor::run_group_os_command_task_list(QCommandLineParser *parser)
+{
+    //TODO
+    os_mgmt_task_list = new QList<task_list_t>();
+    mode = ACTION_OS_TASK_STATS;
+
+    if (group_os->start_task_stats(os_mgmt_task_list) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+int command_processor::run_group_os_command_memory_pool(QCommandLineParser *parser)
+{
+    //TODO
+    os_mgmt_memory_pool = new QList<memory_pool_t>();
+    mode = ACTION_OS_MEMORY_POOL;
+
+    if (group_os->start_memory_pool(os_mgmt_memory_pool) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_os_command_reset(QList<entry_t> *entries)
+{
+    //force
+    entries->append({{&option_command_os_force}, false, false});
+}
+
+int command_processor::run_group_os_command_reset(QCommandLineParser *parser)
+{
+    //force
+    mode = ACTION_OS_RESET;
+
+    if (group_os->start_reset(parser->isSet(option_command_os_force)) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+int command_processor::run_group_os_command_mcumgr_parameters(QCommandLineParser *parser)
+{
+    mode = ACTION_OS_MCUMGR_BUFFER;
+
+    if (group_os->start_mcumgr_parameters(&os_mgmt_mcumgr_parameters_buffer_size, &os_mgmt_mcumgr_parameters_buffer_count) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+}
+
+void command_processor::add_group_os_command_application_information(QList<entry_t> *entries)
+{
+    //format
+    entries->append({{&option_command_os_format}, false, false});
+}
+
+int command_processor::run_group_os_command_application_information(QCommandLineParser *parser)
+{
+    //format
+    os_mgmt_os_application_info_response = new QString();
+    mode = ACTION_OS_OS_APPLICATION_INFO;
+
+    if (group_os->start_os_application_info((parser->isSet(option_command_os_format) == true ? parser->value(option_command_os_format) : ""), os_mgmt_os_application_info_response) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+int command_processor::run_group_os_command_get_time_and_date(QCommandLineParser *parser)
+{
+    //TODO
+    mode = ACTION_OS_DATETIME_GET;
+
+    //if (group_os->start_date_time_get() == true)
+    //{
+    //    return EXIT_CODE_SUCCESS;
+    //}
+
+    return EXIT_CODE_TODO_AA;
+    //QDateTime *date_time
+}
+
+void command_processor::add_group_os_command_set_time_and_date(QList<entry_t> *entries)
+{
+    //datetime
+    entries->append({{&option_command_os_datetime}, true, false});
+}
+
+int command_processor::run_group_os_command_set_time_and_date(QCommandLineParser *parser)
+{
+    //TODO
+    //datetime
+    //option_command_os_datetime
+    mode = ACTION_OS_DATETIME_SET;
+
+    //if (group_os->start_date_time_set() == true)
+    //{
+    //    return EXIT_CODE_SUCCESS;
+    //}
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_os_command_bootloader_information(QList<entry_t> *entries)
+{
+    //query
+    entries->append({{&option_command_os_query}, false, false});
+}
+
+int command_processor::run_group_os_command_bootloader_information(QCommandLineParser *parser)
+{
+    //query
+    os_mgmt_bootloader_info_response = new QVariant();
+    mode = ACTION_OS_BOOTLOADER_INFO;
+
+    if (group_os->start_bootloader_info((parser->isSet(option_command_os_query) == true ? parser->value(option_command_os_query) : ""), os_mgmt_bootloader_info_response) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_shell_command_execute(QList<entry_t> *entries)
+{
+    //command
+    entries->append({{&option_command_shell_command}, true, false});
+}
+
+int command_processor::run_group_shell_command_execute(QCommandLineParser *parser)
+{
+    QRegularExpression reTempRE("\\s+");
+    QStringList list_arguments = parser->value(option_command_shell_command).split(reTempRE);
+    mode = ACTION_SHELL_EXECUTE;
+
+    if (group_shell->start_execute(&list_arguments, &shell_mgmt_rc) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
 }
 
 void command_processor::set_group_transport_settings(smp_group *group)
@@ -1756,104 +1892,39 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             else if (user_data == ACTION_OS_RESET)
             {
             }
-#if 0
             else if (user_data == ACTION_OS_MEMORY_POOL)
             {
                 uint16_t i = 0;
-                uint16_t l = table_OS_Memory->rowCount();
-
-                table_OS_Memory->setSortingEnabled(false);
-
-                while (i < memory_list.length())
-                {
-                    if (i >= l)
-                    {
-                        table_OS_Memory->insertRow(i);
-
-                        QTableWidgetItem *row_name = new QTableWidgetItem(memory_list[i].name);
-                        QTableWidgetItem *row_size = new QTableWidgetItem(QString::number(memory_list[i].blocks * memory_list[i].size));
-                        QTableWidgetItem *row_free = new QTableWidgetItem(QString::number(memory_list[i].free * memory_list[i].size));
-                        QTableWidgetItem *row_minimum = new QTableWidgetItem(QString::number(memory_list[i].minimum * memory_list[i].size));
-
-                        table_OS_Memory->setItem(i, 0, row_name);
-                        table_OS_Memory->setItem(i, 1, row_size);
-                        table_OS_Memory->setItem(i, 2, row_free);
-                        table_OS_Memory->setItem(i, 3, row_minimum);
-                    }
-                    else
-                    {
-                        table_OS_Memory->item(i, 0)->setText(memory_list[i].name);
-                        table_OS_Memory->item(i, 1)->setText(QString::number(memory_list[i].blocks * memory_list[i].size));
-                        table_OS_Memory->item(i, 2)->setText(QString::number(memory_list[i].free * memory_list[i].size));
-                        table_OS_Memory->item(i, 3)->setText(QString::number(memory_list[i].minimum * memory_list[i].size));
-                    }
-
-                    ++i;
-                }
+                uint16_t l = (*this->os_mgmt_memory_pool).length();
 
                 while (i < l)
                 {
-                    table_OS_Memory->removeRow((table_OS_Memory->rowCount() - 1));
+                    log_information() << i << " - " << (*this->os_mgmt_memory_pool)[i].name;
+                    log_information() << "\tSize: " << (*this->os_mgmt_memory_pool)[i].size;
+                    log_information() << "\tBlocks: " << (*this->os_mgmt_memory_pool)[i].blocks;
+                    log_information() << "\tFree: " << (*this->os_mgmt_memory_pool)[i].free;
+                    log_information() << "\tMinimum: " << (*this->os_mgmt_memory_pool)[i].minimum;
+
                     ++i;
                 }
-
-                table_OS_Memory->setSortingEnabled(true);
             }
             else if (user_data == ACTION_OS_TASK_STATS)
             {
                 uint16_t i = 0;
-                uint16_t l = table_OS_Tasks->rowCount();
-
-                table_OS_Tasks->setSortingEnabled(false);
-
-                while (i < task_list.length())
-                {
-                    if (i >= l)
-                    {
-                        table_OS_Tasks->insertRow(i);
-
-                        QTableWidgetItem *row_name = new QTableWidgetItem(task_list[i].name);
-                        QTableWidgetItem *row_id = new QTableWidgetItem(QString::number(task_list[i].id));
-                        QTableWidgetItem *row_priority = new QTableWidgetItem(QString::number(task_list[i].priority));
-                        QTableWidgetItem *row_state = new QTableWidgetItem(QString::number(task_list[i].state));
-                        QTableWidgetItem *row_context_switches = new QTableWidgetItem(QString::number(task_list[i].context_switches));
-                        QTableWidgetItem *row_runtime = new QTableWidgetItem(QString::number(task_list[i].runtime));
-                        QTableWidgetItem *row_stack_size = new QTableWidgetItem(QString::number(task_list[i].stack_size * 4));
-                        QTableWidgetItem *row_stack_usage = new QTableWidgetItem(QString::number(task_list[i].stack_usage * 4));
-
-                        table_OS_Tasks->setItem(i, 0, row_name);
-                        table_OS_Tasks->setItem(i, 1, row_id);
-                        table_OS_Tasks->setItem(i, 2, row_priority);
-                        table_OS_Tasks->setItem(i, 3, row_state);
-                        table_OS_Tasks->setItem(i, 4, row_context_switches);
-                        table_OS_Tasks->setItem(i, 5, row_runtime);
-                        table_OS_Tasks->setItem(i, 6, row_stack_size);
-                        table_OS_Tasks->setItem(i, 7, row_stack_usage);
-                    }
-                    else
-                    {
-                        table_OS_Tasks->item(i, 0)->setText(task_list[i].name);
-                        table_OS_Tasks->item(i, 1)->setText(QString::number(task_list[i].id));
-                        table_OS_Tasks->item(i, 2)->setText(QString::number(task_list[i].priority));
-                        table_OS_Tasks->item(i, 3)->setText(QString::number(task_list[i].state));
-                        table_OS_Tasks->item(i, 4)->setText(QString::number(task_list[i].context_switches));
-                        table_OS_Tasks->item(i, 5)->setText(QString::number(task_list[i].runtime));
-                        table_OS_Tasks->item(i, 6)->setText(QString::number(task_list[i].stack_size * sizeof(uint32_t)));
-                        table_OS_Tasks->item(i, 7)->setText(QString::number(task_list[i].stack_usage * sizeof(uint32_t)));
-                    }
-
-                    ++i;
-                }
+                uint16_t l = (*this->os_mgmt_task_list).length();
 
                 while (i < l)
                 {
-                    table_OS_Tasks->removeRow((table_OS_Tasks->rowCount() - 1));
+                    log_information() << i << "(" << (*this->os_mgmt_task_list)[i].id << ")" << " - " << (*this->os_mgmt_task_list)[i].name;
+                    log_information() << "\tContext switches: " << (*this->os_mgmt_task_list)[i].context_switches;
+                    log_information() << "\tPriority: " << (*this->os_mgmt_task_list)[i].priority;
+                    log_information() << "\tRuntime: " << (*this->os_mgmt_task_list)[i].runtime;
+                    log_information() << "\tState: " << (*this->os_mgmt_task_list)[i].state;
+                    log_information() << "\tStack usage: " << ((*this->os_mgmt_task_list)[i].stack_usage * sizeof(uint32_t)) << "/" << ((*this->os_mgmt_task_list)[i].stack_size * sizeof(uint32_t));
+
                     ++i;
                 }
-
-                table_OS_Tasks->setSortingEnabled(true);
             }
-#endif
             else if (user_data == ACTION_OS_MCUMGR_BUFFER)
             {
                 log_information() << "Buffer size: " << os_mgmt_mcumgr_parameters_buffer_size << ", buffer count: " << os_mgmt_mcumgr_parameters_buffer_count;
@@ -1945,12 +2016,20 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             delete os_mgmt_bootloader_info_response;
             os_mgmt_bootloader_info_response = nullptr;
         }
+        else if (user_data == ACTION_OS_TASK_STATS)
+        {
+            delete os_mgmt_task_list;
+            os_mgmt_task_list = nullptr;
+        }
+        else if (user_data == ACTION_OS_MEMORY_POOL)
+        {
+            delete os_mgmt_memory_pool;
+            os_mgmt_memory_pool = nullptr;
+        }
     }
-#if 0
     else if (sender() == group_shell)
     {
         log_debug() << "shell sender";
-        label_status = lbl_SHELL_Status;
 
         if (status == STATUS_COMPLETE)
         {
@@ -1958,19 +2037,20 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
             if (user_data == ACTION_SHELL_EXECUTE)
             {
-                edit_SHELL_Output->add_dat_in_text(error_string.toUtf8());
+                log_information() << error_string.toUtf8();
 
-                if (shell_rc == 0)
+                if (shell_mgmt_rc == 0)
                 {
                     error_string = nullptr;
                 }
                 else
                 {
-                    error_string = QString("Finished, error (ret): ").append(QString::number(shell_rc));
+                    error_string = QString("Finished, error (ret): ").append(QString::number(shell_mgmt_rc));
                 }
             }
         }
     }
+#if 0
     else if (sender() == group_stat)
     {
         log_debug() << "stat sender";
@@ -2024,10 +2104,10 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             }
         }
     }
+#endif
     else if (sender() == group_fs)
     {
         log_debug() << "fs sender";
-        label_status = lbl_FS_Status;
 
         if (status == STATUS_COMPLETE)
         {
@@ -2043,29 +2123,42 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             }
             else if (user_data == ACTION_FS_HASH_CHECKSUM)
             {
-                error_string.prepend("Finished hash/checksum using ");
-                edit_FS_Result->setText(fs_hash_checksum_response.toHex());
-                edit_FS_Size->setText(QString::number(fs_size_response));
+                log_information() << "Hash/checksum: " << fs_mgmt_hash_checksum->toHex() << ", file size: " << fs_mgmt_file_size;
             }
             else if (user_data == ACTION_FS_SUPPORTED_HASHES_CHECKSUMS)
             {
                 uint8_t i = 0;
+                uint8_t l = fs_mgmt_supported_hashes_checksums->length();
 
-                combo_FS_type->clear();
-
-                while (i < supported_hash_checksum_list.length())
+                while (i < l)
                 {
-                    combo_FS_type->addItem(supported_hash_checksum_list.at(i).name);
-                    log_debug() << supported_hash_checksum_list.at(i).format << ", " << supported_hash_checksum_list.at(i).size;
+                    log_information() << (*fs_mgmt_supported_hashes_checksums)[i].name;
+                    log_information() << "\t" << (*fs_mgmt_supported_hashes_checksums)[i].format;
+                    log_information() << "\t" << (*fs_mgmt_supported_hashes_checksums)[i].size;
                     ++i;
                 }
             }
             else if (user_data == ACTION_FS_STATUS)
             {
-                edit_FS_Size->setText(QString::number(fs_size_response));
+                log_information() << fs_mgmt_file_size;
+            }
+            else if (user_data == ACTION_FS_CLOSE_FILE)
+            {
             }
         }
+
+        if (user_data == ACTION_FS_HASH_CHECKSUM)
+        {
+            delete fs_mgmt_hash_checksum;
+            fs_mgmt_hash_checksum = nullptr;
+        }
+        else if (user_data == ACTION_FS_SUPPORTED_HASHES_CHECKSUMS)
+        {
+            delete fs_mgmt_supported_hashes_checksums;
+            fs_mgmt_supported_hashes_checksums = nullptr;
+        }
     }
+#if 0
     else if (sender() == group_settings)
     {
         log_debug() << "settings sender";
@@ -2162,25 +2255,24 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
     if (finished == true)
     {
         mode = ACTION_IDLE;
-        //relase_transport();
 
         if (error_string == nullptr)
         {
             if (status == STATUS_COMPLETE)
             {
-                error_string = QString("Finished");
+                error_string = tr("Finished");
             }
             else if (status == STATUS_ERROR)
             {
-                error_string = QString("Error");
+                error_string = tr("Error");
             }
             else if (status == STATUS_TIMEOUT)
             {
-                error_string = QString("Command timed out");
+                error_string = tr("Command timed out");
             }
             else if (status == STATUS_CANCELLED)
             {
-                error_string = QString("Cancelled");
+                error_string = tr("Cancelled");
             }
         }
     }
