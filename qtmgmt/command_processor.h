@@ -237,6 +237,10 @@ private:
     //Shell management
     int32_t shell_mgmt_rc;
 
+    //Statistics management
+    QList<stat_value_t> *stat_mgmt_stats;
+    QStringList *stat_mgmt_groups;
+
     const QString value_transport_uart = "uart";
     const QString value_transport_bluetooth = "bluetooth";
     const QString value_transport_udp = "udp";
@@ -283,8 +287,9 @@ private:
     int run_group_shell_command_execute(QCommandLineParser *parser);
 
     //Statistics management
-    //void add_group_stats_command_(QList<entry_t> *entries);
-    //int run_group_stats_command_(QCommandLineParser *parser);
+    void add_group_stats_command_group_data(QList<entry_t> *entries);
+    int run_group_stats_command_group_data(QCommandLineParser *parser);
+    int run_group_stats_command_list_groups(QCommandLineParser *parser);
 
     //Zephyr basic management
     //void add_group_zephyr_command_(QList<entry_t> *entries);
@@ -391,8 +396,13 @@ private:
                 {"Execute command", {"execute"}, &command_processor::add_group_shell_command_execute, &command_processor::run_group_shell_command_execute},
             }
         },
+        {"Statistics management", {"statistics", "stats"}, SMP_GROUP_ID_STATS, group_stat,
+            {
+                {"Group data", {"group", "group-data"}, &command_processor::add_group_stats_command_group_data, &command_processor::run_group_stats_command_group_data},
+                {"List groups", {"list", "list-groups"}, nullptr, &command_processor::run_group_stats_command_list_groups},
+            }
+        },
 #if 0
-        {"Statistics management", {"statistics", "stats"}, SMP_GROUP_ID_STATS, group_stat, &command_processor::add_group_options_stat}, &command_processor::run_group_stat,
         {"Zephyr basic management", {"zephyr"}, SMP_GROUP_ID_ZEPHYR, group_zephyr, &command_processor::add_group_options_zephyr}, &command_processor::run_group_zephyr,
 #endif
     };

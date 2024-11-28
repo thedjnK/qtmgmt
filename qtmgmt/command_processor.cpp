@@ -54,41 +54,6 @@ const QCommandLineOption option_transport_lorawan_password("password", "LoRaWAN 
 const QCommandLineOption option_transport_lorawan_topic("topic", "LoRaWAN MQTT topic", "topic");
 const QCommandLineOption option_transport_lorawan_frame_port("frame-port", "LoRaWAN frame port", "port");
 
-//const QString value_command_img_ = "";
-const QString value_command_enum_count = "count";
-const QString value_command_enum_list = "list";
-const QString value_command_enum_single = "single";
-const QString value_command_enum_details = "details";
-
-const QString value_command_fs_upload = "upload";
-const QString value_command_fs_download = "download";
-const QString value_command_fs_status = "status";
-const QStringList value_command_fs_hash_checksum = QStringList() << "hash" << "checksum" << "hash-checksum";
-const QStringList value_command_fs_supported_hashes_checksums = QStringList() << "supported-hashes" << "supported-checksums" << "supported-hashes-checksums";
-const QString value_command_fs_close = "close";
-
-const QString value_command_os_echo = "echo";
-const QString value_command_os_tasks = "tasks";
-const QString value_command_os_memory = "memory";
-const QString value_command_os_reset = "reset";
-const QString value_command_os_mcumgr_parameters = "mcumgr-parameters";
-const QString value_command_os_application_info = "application-info";
-const QString value_command_os_get_date_time = "get-date-time";
-const QString value_command_os_set_date_time = "set-date-time";
-const QString value_command_os_bootloader_info = "bootloader-info";
-
-const QString value_command_img_get_state = "get-state";
-const QString value_command_img_set_state = "set-state";
-const QString value_command_img_upload = "upload";
-const QString value_command_img_erase = "erase";
-const QString value_command_img_slot_info = "slot-info";
-
-const QString value_command_shell_execute = "execute";
-
-//const QString value_command_settings_ = "";
-//const QString value_command_stat_ = "";
-//const QString value_command_zephyr_ = "";
-
 //Enumeration management group
 const QCommandLineOption option_command_enum_index("index", "Index (0-based)", "index");
 //const QCommandLineOption option_command_enum_groups("groups", "List of groups (comma separated)", "groups");
@@ -116,7 +81,10 @@ const QCommandLineOption option_command_img_upgrade("upgrade", "Only accept upgr
 const QCommandLineOption option_command_img_slot("slot", "Slot number", "slot");
 
 //Shell management group
-const QCommandLineOption option_command_shell_command("command2", "Command to execute", "command");
+const QCommandLineOption option_command_shell_run("run", "Command to execute", "command");
+
+//Statistics management group
+const QCommandLineOption option_command_stats_group("group", "Group to get statistics of", "group");
 
 //SMP options
 const QCommandLineOption option_mtu("mtu", "MTU (default: 256, can be: 96-16384)", "mtu");
@@ -159,6 +127,8 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
     os_mgmt_memory_pool = nullptr;
     img_mgmt_get_state_images = nullptr;
     img_mgmt_slot_info_images = nullptr;
+    stat_mgmt_stats = nullptr;
+    stat_mgmt_groups = nullptr;
 
     //Execute run function in event loop so that QCoreApplication::exit() works
     QTimer::singleShot(0, this, SLOT(run()));
@@ -237,6 +207,18 @@ command_processor::~command_processor()
     {
         delete img_mgmt_slot_info_images;
         img_mgmt_slot_info_images = nullptr;
+    }
+
+    if (stat_mgmt_stats != nullptr)
+    {
+        delete stat_mgmt_stats;
+        stat_mgmt_stats = nullptr;
+    }
+
+    if (stat_mgmt_groups != nullptr)
+    {
+        delete stat_mgmt_groups;
+        stat_mgmt_groups = nullptr;
     }
 
     if (active_group != nullptr)
@@ -1611,16 +1593,48 @@ int command_processor::run_group_os_command_bootloader_information(QCommandLineP
 void command_processor::add_group_shell_command_execute(QList<entry_t> *entries)
 {
     //command
-    entries->append({{&option_command_shell_command}, true, false});
+    entries->append({{&option_command_shell_run}, true, false});
 }
 
 int command_processor::run_group_shell_command_execute(QCommandLineParser *parser)
 {
     QRegularExpression reTempRE("\\s+");
-    QStringList list_arguments = parser->value(option_command_shell_command).split(reTempRE);
+    QStringList list_arguments = parser->value(option_command_shell_run).split(reTempRE);
     mode = ACTION_SHELL_EXECUTE;
 
     if (group_shell->start_execute(&list_arguments, &shell_mgmt_rc) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+void command_processor::add_group_stats_command_group_data(QList<entry_t> *entries)
+{
+    //group
+    entries->append({{&option_command_stats_group}, true, false});
+}
+
+int command_processor::run_group_stats_command_group_data(QCommandLineParser *parser)
+{
+    stat_mgmt_stats = new QList<stat_value_t>();
+    mode = ACTION_STAT_GROUP_DATA;
+
+    if (group_stat->start_group_data(parser->value(option_command_shell_run), stat_mgmt_stats) == true)
+    {
+        return EXIT_CODE_SUCCESS;
+    }
+
+    return EXIT_CODE_TODO_AA;
+}
+
+int command_processor::run_group_stats_command_list_groups(QCommandLineParser *parser)
+{
+    stat_mgmt_groups = new QStringList();
+    mode = ACTION_STAT_LIST_GROUPS;
+
+    if (group_stat->start_list_groups(stat_mgmt_groups) == true)
     {
         return EXIT_CODE_SUCCESS;
     }
@@ -2050,11 +2064,9 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             }
         }
     }
-#if 0
     else if (sender() == group_stat)
     {
         log_debug() << "stat sender";
-        label_status = lbl_STAT_Status;
 
         if (status == STATUS_COMPLETE)
         {
@@ -2063,48 +2075,39 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
             if (user_data == ACTION_STAT_GROUP_DATA)
             {
                 uint16_t i = 0;
-                uint16_t l = table_STAT_Values->rowCount();
-
-                table_STAT_Values->setSortingEnabled(false);
-
-                while (i < stat_list.length())
-                {
-                    if (i >= l)
-                    {
-                        table_STAT_Values->insertRow(i);
-
-                        QTableWidgetItem *row_name = new QTableWidgetItem(stat_list[i].name);
-                        QTableWidgetItem *row_value = new QTableWidgetItem(QString::number(stat_list[i].value));
-
-
-                        table_STAT_Values->setItem(i, 0, row_name);
-                        table_STAT_Values->setItem(i, 1, row_value);
-                    }
-                    else
-                    {
-                        table_STAT_Values->item(i, 0)->setText(stat_list[i].name);
-                        table_STAT_Values->item(i, 1)->setText(QString::number(stat_list[i].value));
-                    }
-
-                    ++i;
-                }
+                uint16_t l = stat_mgmt_stats->length();
 
                 while (i < l)
                 {
-                    table_STAT_Values->removeRow((table_STAT_Values->rowCount() - 1));
+                    log_information() << (*stat_mgmt_stats)[i].name << ": " << (*stat_mgmt_stats)[i].value;
                     ++i;
                 }
-
-                table_STAT_Values->setSortingEnabled(true);
             }
             else if (user_data == ACTION_STAT_LIST_GROUPS)
             {
-                combo_STAT_Group->clear();
-                combo_STAT_Group->addItems(group_list);
+                uint16_t i = 0;
+                uint16_t l = stat_mgmt_groups->length();
+
+                while (i < l)
+                {
+                    log_information() << (*stat_mgmt_groups)[i];
+                    ++i;
+                }
+
             }
         }
+
+        if (user_data == ACTION_STAT_GROUP_DATA)
+        {
+            delete stat_mgmt_stats;
+            stat_mgmt_stats = nullptr;
+        }
+        else if (user_data == ACTION_STAT_LIST_GROUPS)
+        {
+            delete stat_mgmt_groups;
+            stat_mgmt_groups = nullptr;
+        }
     }
-#endif
     else if (sender() == group_fs)
     {
         log_debug() << "fs sender";
