@@ -890,7 +890,6 @@ void command_processor::run()
     connect(active_group, SIGNAL(progress(uint8_t,uint8_t)), this, SLOT(progress(uint8_t,uint8_t)));
 
     processor->set_transport(active_transport);
-    set_group_transport_settings(active_group);
 
     exit_code = (this->*supported_groups[active_group_index].commands[active_command_index].run_function)(&parser);
 
@@ -1181,6 +1180,7 @@ int command_processor::configure_transport_options_lorawan(smp_transport *transp
 int command_processor::run_group_enum_command_count(QCommandLineParser *parser)
 {
     mode = ACTION_ENUM_COUNT;
+    set_group_transport_settings(active_group);
 
     if (group_enum->start_enum_count(&enum_mgmt_count) == true)
     {
@@ -1194,6 +1194,7 @@ int command_processor::run_group_enum_command_list(QCommandLineParser *parser)
 {
     enum_mgmt_group_ids = new QList<uint16_t>();
     mode = ACTION_ENUM_LIST;
+    set_group_transport_settings(active_group);
 
     if (group_enum->start_enum_list(enum_mgmt_group_ids) == true)
     {
@@ -1212,6 +1213,7 @@ void command_processor::add_group_enum_command_single(QList<entry_t> *entries)
 int command_processor::run_group_enum_command_single(QCommandLineParser *parser)
 {
     mode = ACTION_ENUM_SINGLE;
+    set_group_transport_settings(active_group);
 
     if (group_enum->start_enum_single(parser->value(option_command_enum_index).toUInt(), &enum_mgmt_id, &enum_mgmt_end) == true)
     {
@@ -1232,6 +1234,7 @@ int command_processor::run_group_enum_command_details(QCommandLineParser *parser
 {
     enum_mgmt_group_details = new QList<enum_details_t>;
     mode = ACTION_ENUM_DETAILS;
+    set_group_transport_settings(active_group);
 
     if (group_enum->start_enum_details(enum_mgmt_group_details, &enum_mgmt_group_fields_present) == true)
     {
@@ -1253,6 +1256,7 @@ int command_processor::run_group_fs_command_upload(QCommandLineParser *parser)
 {
     //TODO
     mode = ACTION_FS_UPLOAD;
+    set_group_transport_settings(active_group);
 
     if (group_fs->start_upload(parser->value(option_command_fs_local_file), parser->value(option_command_fs_remote_file)) == true)
     {
@@ -1266,6 +1270,7 @@ int command_processor::run_group_fs_command_download(QCommandLineParser *parser)
 {
     //TODO
     mode = ACTION_FS_DOWNLOAD;
+    set_group_transport_settings(active_group);
 
     if (group_fs->start_download(parser->value(option_command_fs_remote_file), parser->value(option_command_fs_local_file)) == true)
     {
@@ -1285,6 +1290,7 @@ int command_processor::run_group_fs_command_status(QCommandLineParser *parser)
 {
     //TODO
     mode = ACTION_FS_STATUS;
+    set_group_transport_settings(active_group);
 
     if (group_fs->start_status(parser->value(option_command_fs_remote_file), &fs_mgmt_file_size) == true)
     {
@@ -1307,6 +1313,7 @@ int command_processor::run_group_fs_command_hash_checksum(QCommandLineParser *pa
     //TODO
     fs_mgmt_hash_checksum = new QByteArray();
     mode = ACTION_FS_HASH_CHECKSUM;
+    set_group_transport_settings(active_group);
 
 //TODO: optional?
     if (group_fs->start_hash_checksum(parser->value(option_command_fs_remote_file), parser->value(option_command_fs_hash_checksum), fs_mgmt_hash_checksum, &fs_mgmt_file_size) == true)
@@ -1322,6 +1329,7 @@ int command_processor::run_group_fs_command_supported_hashes_checksums(QCommandL
     //TODO
     fs_mgmt_supported_hashes_checksums = new QList<hash_checksum_t>();
     mode = ACTION_FS_SUPPORTED_HASHES_CHECKSUMS;
+    set_group_transport_settings(active_group);
 
     if (group_fs->start_supported_hashes_checksums(fs_mgmt_supported_hashes_checksums) == true)
     {
@@ -1334,6 +1342,7 @@ int command_processor::run_group_fs_command_supported_hashes_checksums(QCommandL
 int command_processor::run_group_fs_command_close_file(QCommandLineParser *parser)
 {
     mode = ACTION_FS_CLOSE_FILE;
+    set_group_transport_settings(active_group);
 
     if (group_fs->start_file_close() == true)
     {
@@ -1347,6 +1356,7 @@ int command_processor::run_group_img_command_get_state(QCommandLineParser *parse
 {
     img_mgmt_get_state_images = new QList<image_state_t>();
     mode = ACTION_IMG_IMAGE_LIST;
+    set_group_transport_settings(active_group);
 
     if (group_img->start_image_get(img_mgmt_get_state_images) == true)
     {
@@ -1374,6 +1384,7 @@ int command_processor::run_group_img_command_set_state(QCommandLineParser *parse
     }
 
     mode = ACTION_IMG_IMAGE_SET;
+    set_group_transport_settings(active_group);
 
     if (group_img->start_image_set((parser->isSet(option_command_img_hash) ? &hash : nullptr), (parser->isSet(option_command_img_confirm) ? true : false), nullptr) == true)
     {
@@ -1398,6 +1409,7 @@ int command_processor::run_group_img_command_upload(QCommandLineParser *parser)
     mode = ACTION_IMG_UPLOAD;
     upload_mode = (parser->isSet(option_command_img_test) == true ? IMAGE_UPLOAD_MODE_TEST : (parser->isSet(option_command_img_confirm) == true ? IMAGE_UPLOAD_MODE_CONFIRM : IMAGE_UPLOAD_MODE_NORMAL));
     upload_reset = parser->isSet(option_command_img_reset);
+    set_group_transport_settings(active_group);
 
     if (group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &upload_hash) == true)
     {
@@ -1416,6 +1428,7 @@ void command_processor::add_group_img_command_erase_slot(QList<entry_t> *entries
 int command_processor::run_group_img_command_erase_slot(QCommandLineParser *parser)
 {
     mode = ACTION_IMG_IMAGE_ERASE;
+    set_group_transport_settings(active_group);
 
     if (group_img->start_image_erase(parser->value(option_command_img_slot).toUInt()) == true)
     {
@@ -1430,6 +1443,7 @@ int command_processor::run_group_img_command_slot_info(QCommandLineParser *parse
     //TODO
     img_mgmt_slot_info_images = new QList<slot_info_t>();
     mode = ACTION_IMG_IMAGE_SLOT_INFO;
+    set_group_transport_settings(active_group);
 
     if (group_img->start_image_slot_info(img_mgmt_slot_info_images) == true)
     {
@@ -1449,6 +1463,7 @@ int command_processor::run_group_os_command_echo(QCommandLineParser *parser)
 {
     //data
     mode = ACTION_OS_ECHO;
+    set_group_transport_settings(active_group);
 
     if (group_os->start_echo(parser->value(option_command_os_data)) == true)
     {
@@ -1463,6 +1478,7 @@ int command_processor::run_group_os_command_task_list(QCommandLineParser *parser
     //TODO
     os_mgmt_task_list = new QList<task_list_t>();
     mode = ACTION_OS_TASK_STATS;
+    set_group_transport_settings(active_group);
 
     if (group_os->start_task_stats(os_mgmt_task_list) == true)
     {
@@ -1477,6 +1493,7 @@ int command_processor::run_group_os_command_memory_pool(QCommandLineParser *pars
     //TODO
     os_mgmt_memory_pool = new QList<memory_pool_t>();
     mode = ACTION_OS_MEMORY_POOL;
+    set_group_transport_settings(active_group);
 
     if (group_os->start_memory_pool(os_mgmt_memory_pool) == true)
     {
@@ -1496,6 +1513,7 @@ int command_processor::run_group_os_command_reset(QCommandLineParser *parser)
 {
     //force
     mode = ACTION_OS_RESET;
+    set_group_transport_settings(active_group);
 
     if (group_os->start_reset(parser->isSet(option_command_os_force)) == true)
     {
@@ -1508,6 +1526,7 @@ int command_processor::run_group_os_command_reset(QCommandLineParser *parser)
 int command_processor::run_group_os_command_mcumgr_parameters(QCommandLineParser *parser)
 {
     mode = ACTION_OS_MCUMGR_BUFFER;
+    set_group_transport_settings(active_group);
 
     if (group_os->start_mcumgr_parameters(&os_mgmt_mcumgr_parameters_buffer_size, &os_mgmt_mcumgr_parameters_buffer_count) == true)
     {
@@ -1526,6 +1545,7 @@ int command_processor::run_group_os_command_application_information(QCommandLine
     //format
     os_mgmt_os_application_info_response = new QString();
     mode = ACTION_OS_OS_APPLICATION_INFO;
+    set_group_transport_settings(active_group);
 
     if (group_os->start_os_application_info((parser->isSet(option_command_os_format) == true ? parser->value(option_command_os_format) : ""), os_mgmt_os_application_info_response) == true)
     {
@@ -1539,6 +1559,7 @@ int command_processor::run_group_os_command_get_time_and_date(QCommandLineParser
 {
     //TODO
     mode = ACTION_OS_DATETIME_GET;
+    set_group_transport_settings(active_group);
 
     //if (group_os->start_date_time_get() == true)
     //{
@@ -1561,6 +1582,7 @@ int command_processor::run_group_os_command_set_time_and_date(QCommandLineParser
     //datetime
     //option_command_os_datetime
     mode = ACTION_OS_DATETIME_SET;
+    set_group_transport_settings(active_group);
 
     //if (group_os->start_date_time_set() == true)
     //{
@@ -1581,6 +1603,7 @@ int command_processor::run_group_os_command_bootloader_information(QCommandLineP
     //query
     os_mgmt_bootloader_info_response = new QVariant();
     mode = ACTION_OS_BOOTLOADER_INFO;
+    set_group_transport_settings(active_group);
 
     if (group_os->start_bootloader_info((parser->isSet(option_command_os_query) == true ? parser->value(option_command_os_query) : ""), os_mgmt_bootloader_info_response) == true)
     {
@@ -1601,6 +1624,7 @@ int command_processor::run_group_shell_command_execute(QCommandLineParser *parse
     QRegularExpression reTempRE("\\s+");
     QStringList list_arguments = parser->value(option_command_shell_run).split(reTempRE);
     mode = ACTION_SHELL_EXECUTE;
+    set_group_transport_settings(active_group);
 
     if (group_shell->start_execute(&list_arguments, &shell_mgmt_rc) == true)
     {
@@ -1620,6 +1644,7 @@ int command_processor::run_group_stats_command_group_data(QCommandLineParser *pa
 {
     stat_mgmt_stats = new QList<stat_value_t>();
     mode = ACTION_STAT_GROUP_DATA;
+    set_group_transport_settings(active_group);
 
     if (group_stat->start_group_data(parser->value(option_command_shell_run), stat_mgmt_stats) == true)
     {
@@ -1633,6 +1658,7 @@ int command_processor::run_group_stats_command_list_groups(QCommandLineParser *p
 {
     stat_mgmt_groups = new QStringList();
     mode = ACTION_STAT_LIST_GROUPS;
+    set_group_transport_settings(active_group);
 
     if (group_stat->start_list_groups(stat_mgmt_groups) == true)
     {
@@ -1897,8 +1923,8 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
 
             if (user_data == ACTION_OS_ECHO)
             {
-//                edit_OS_Echo_Output->appendPlainText(error_string);
-//                error_string = nullptr;
+                log_information() << "Echo response: " << error_string;
+                error_string = nullptr;
             }
             else if (user_data == ACTION_OS_UPLOAD_RESET)
             {
