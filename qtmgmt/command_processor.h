@@ -242,7 +242,9 @@ private:
     QStringList *stat_mgmt_groups;
 
     const QString value_transport_uart = "uart";
+    const QString value_transport_serial = "serial";
     const QString value_transport_bluetooth = "bluetooth";
+    const QString value_transport_bt = "bt";
     const QString value_transport_udp = "udp";
     const QString value_transport_lorawan = "lorawan";
 
@@ -409,16 +411,16 @@ private:
 
     const QList<supported_transport_t> supported_transports = {
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
-        {"UART transport", {"uart", "serial"}, transport_uart, &command_processor::add_transport_options_uart, &command_processor::configure_transport_options_uart},
+        {"UART transport", {value_transport_uart, value_transport_serial}, transport_uart, &command_processor::add_transport_options_uart, &command_processor::configure_transport_options_uart},
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
-        {"Bluetooth Low Energy transport", {"bluetooth", "bt"}, transport_bluetooth, &command_processor::add_transport_options_bluetooth, &command_processor::configure_transport_options_bluetooth},
+        {"Bluetooth Low Energy transport", {value_transport_bluetooth, value_transport_bt}, transport_bluetooth, &command_processor::add_transport_options_bluetooth, &command_processor::configure_transport_options_bluetooth},
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UDP)
-        {"UDP transport", {"udp"}, transport_udp, &command_processor::add_transport_options_udp, &command_processor::configure_transport_options_udp},
+        {"UDP transport", {value_transport_udp}, transport_udp, &command_processor::add_transport_options_udp, &command_processor::configure_transport_options_udp},
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
-        {"LoRaWAN (TTS/MQTT) transport", {"lorawan"}, transport_lorawan, &command_processor::add_transport_options_lorawan, &command_processor::configure_transport_options_lorawan},
+        {"LoRaWAN (TTS/MQTT) transport", {value_transport_lorawan}, transport_lorawan, &command_processor::add_transport_options_lorawan, &command_processor::configure_transport_options_lorawan},
 #endif
     };
 };

@@ -767,14 +767,14 @@ void command_processor::run()
     {
     }
 #if defined(PLUGIN_MCUMGR_TRANSPORT_UART)
-    else if (user_transport == value_transport_uart)
+    else if (user_transport == value_transport_uart || user_transport == value_transport_serial)
     {
         transport_uart = new smp_uart(this);
         active_transport = transport_uart;
     }
 #endif
 #if defined(PLUGIN_MCUMGR_TRANSPORT_BLUETOOTH)
-    else if (user_transport == value_transport_bluetooth)
+    else if (user_transport == value_transport_bluetooth || user_transport == value_transport_bt)
     {
         transport_bluetooth = new smp_bluetooth(this);
         active_transport = transport_bluetooth;
