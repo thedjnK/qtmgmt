@@ -14,7 +14,9 @@ INCLUDEPATH    += ../mcumgr/AuTerm/plugins/mcumgr
 
 SOURCES += \
 	command_processor.cpp \
-	main.cpp
+	globals.cpp \
+	main.cpp \
+	text_thread.cpp
 
 HEADERS += \
     ../mcumgr/AuTerm/AuTerm/AutPlugin.h \
@@ -36,7 +38,9 @@ HEADERS += \
     ../mcumgr/AuTerm/plugins/mcumgr/smp_group.h \
     ../mcumgr/smp_uart.h \
     command_processor.h \
-    qtmgmt.h
+    globals.h \
+    qtmgmt.h \
+    text_thread.h
 
 #    ../mcumgr/AuTerm/plugins/mcumgr/smp_json.h \
 

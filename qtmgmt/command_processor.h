@@ -1,5 +1,5 @@
 /******************************************************************************
-** Copyright (C) 2024 Jamie M.
+** Copyright (C) 2024-2025 Jamie M.
 **
 ** Project: qtmgmt
 **
@@ -50,6 +50,10 @@
 #if defined(PLUGIN_MCUMGR_TRANSPORT_LORAWAN)
 #include <smp_lorawan.h>
 #endif
+#include <QSocketNotifier>
+#include <QWaitCondition>
+#include "text_thread.h"
+#include "globals.h"
 
 /******************************************************************************/
 // Enum typedefs
@@ -138,12 +142,16 @@ public:
     ~command_processor();
 
 private slots:
-    void run();
+    void run(QStringList args = QCoreApplication::arguments());
     //void custom_message_callback(enum custom_message_callback_t type, smp_error_t *data);
     void status(uint8_t user_data, group_status status, QString error_string);
     void progress(uint8_t user_data, uint8_t percent);
     void transport_connected();
     void transport_disconnected();
+    void interactive_thread_started();
+    void interactive_thread_data(QString data);
+    void interactive_mode();
+    void return_status(int status);
 
 signals:
 
@@ -423,6 +431,9 @@ private:
         {"LoRaWAN (TTS/MQTT) transport", {value_transport_lorawan}, transport_lorawan, &command_processor::add_transport_options_lorawan, &command_processor::configure_transport_options_lorawan},
 #endif
     };
+
+    text_thread text_thread_object;
+    bool is_interactive_mode;
 };
 
 #endif // COMMAND_PROCESSOR_H

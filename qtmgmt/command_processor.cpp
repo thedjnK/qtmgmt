@@ -1,5 +1,5 @@
 /******************************************************************************
-** Copyright (C) 2024 Jamie M.
+** Copyright (C) 2024-2025 Jamie M.
 **
 ** Project: qtmgmt
 **
@@ -113,6 +113,7 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
     group_stat = nullptr;
     group_zephyr = nullptr;
     transport_uart = nullptr;
+    active_group = nullptr;
     active_transport = nullptr;
     mode = ACTION_IDLE;
     smp_v2 = true;
@@ -129,6 +130,7 @@ command_processor::command_processor(QObject *parent) : QObject{parent}
     img_mgmt_slot_info_images = nullptr;
     stat_mgmt_stats = nullptr;
     stat_mgmt_groups = nullptr;
+    is_interactive_mode = false;
 
     //Execute run function in event loop so that QCoreApplication::exit() works
     QTimer::singleShot(0, this, SLOT(run()));
@@ -298,7 +300,7 @@ command_processor::~command_processor()
     }
 }
 
-void command_processor::run()
+void command_processor::run(QStringList args)
 {
     QCommandLineParser parser;
     QList<entry_t> entries;
@@ -310,7 +312,9 @@ void command_processor::run()
     const QCommandLineOption option_help_transports("help-transports", "Show all help of all transports");
     const QCommandLineOption option_help_groups("help-groups", "Show all help of all groups");
     const QCommandLineOption option_help_commands("help-commands", "Show all help of all groups");
+    const QCommandLineOption option_interactive("interactive", "Interactive mode");
     const QCommandLineOption option_version = parser.addVersionOption();
+    const QCommandLineOption option_quit("quit", "Quit");
     int exit_code = EXIT_CODE_SUCCESS;
     QString user_transport;
     QString user_group;
@@ -333,21 +337,37 @@ void command_processor::run()
     parser.addOption(option_group);
     parser.addOption(option_command);
     parser.addOption(option_mtu);
-    parser.parse(QCoreApplication::arguments());
+
+    if (is_interactive_mode == true)
+    {
+        parser.addOption(option_quit);
+    }
+    else
+    {
+        parser.addOption(option_interactive);
+    }
+
+    parser.parse(args);
+
+    if (is_interactive_mode == true && parser.isSet(option_quit))
+    {
+        text_thread_object.set_quit();
+        text_thread_wait_condition.wakeAll();
+        text_thread_object.wait(1000);
+        return QCoreApplication::exit(0);
+    }
 
     if (parser.isSet(option_version))
     {
         fputs(qPrintable(QCoreApplication::applicationName() % tr(" version ") % QCoreApplication::applicationVersion() % newline), stdout);
-        QCoreApplication::exit(EXIT_CODE_SUCCESS);
-        return;
+        return return_status(EXIT_CODE_SUCCESS);
     }
 
     if (((parser.isSet(option_help_all) ? 1 : 0) + (parser.isSet(option_help_transports) ? 1 : 0) + (parser.isSet(option_help_groups) ? 1 : 0) + (parser.isSet(option_help_commands) ? 1 : 0) + (parser.isSet(option_help) ? 1 : 0)) > 1)
     {
         QString help_options = "--" % option_help.names().join(" or --") % " or --" % option_help_all.names().join(" or --") % " or --" % option_help_transports.names().join(" or --") % " or --" % option_help_groups.names().join(" or --") % " or --" % option_help_commands.names().join(" or --");
         fputs(qPrintable(tr("Conflicting command line options, only one of: ") % help_options % tr(" may be provided") % newline), stdout);
-        QCoreApplication::exit(EXIT_CODE_SUCCESS);
-        return;
+        return return_status(EXIT_CODE_SUCCESS);
     }
 
     //Check for special help options
@@ -506,8 +526,7 @@ void command_processor::run()
             }
         }
 
-        QCoreApplication::exit(EXIT_CODE_SUCCESS);
-        return;
+        return return_status(EXIT_CODE_SUCCESS);
     }
 
     //Add SMP version command line
@@ -535,8 +554,7 @@ void command_processor::run()
         if (i == l)
         {
             fputs(qPrintable(tr("Error: invalid transport specified")), stdout);
-            QCoreApplication::exit(EXIT_CODE_INVALID_TRANSPORT);
-            return;
+            return return_status(EXIT_CODE_INVALID_TRANSPORT);
         }
     }
 
@@ -577,8 +595,7 @@ void command_processor::run()
                     if (i2 == l2)
                     {
                         fputs(qPrintable(tr("Error: invalid command specified")), stdout);
-                        QCoreApplication::exit(EXIT_CODE_INVALID_COMMAND);
-                        return;
+                        return return_status(EXIT_CODE_INVALID_COMMAND);
                     }
                 }
 
@@ -592,8 +609,7 @@ void command_processor::run()
         if (i == l)
         {
             fputs(qPrintable(tr("Error: invalid group specified")), stdout);
-            QCoreApplication::exit(EXIT_CODE_INVALID_GROUP);
-            return;
+            return return_status(EXIT_CODE_INVALID_GROUP);
         }
     }
 
@@ -618,8 +634,12 @@ void command_processor::run()
     if (parser.isSet(option_help))
     {
         fputs(qPrintable(parser.helpText()), stdout);
-        QCoreApplication::exit(EXIT_CODE_SUCCESS);
-        return;
+        return return_status(EXIT_CODE_SUCCESS);
+    }
+
+    if (is_interactive_mode == false && parser.isSet(option_interactive))
+    {
+        return interactive_mode();
     }
 
     if (!parser.isSet(option_transport) || !parser.isSet(option_group) || !parser.isSet(option_command))
@@ -639,18 +659,16 @@ void command_processor::run()
             fputs(qPrintable(tr("Missing required argument: ") % "--" % option_command.names().join(" or --") % newline), stdout);
         }
 
-        QCoreApplication::exit(EXIT_CODE_MISSING_REQUIRED_ARGUMENTS);
-        return;
+        return return_status(EXIT_CODE_MISSING_REQUIRED_ARGUMENTS);
     }
 
     //Re-parse command line arguments after transport/group/command options have been added
-    parser.parse(QCoreApplication::arguments());
+    parser.parse(args);
 
     if (parser.unknownOptionNames().length() > 0 || parser.positionalArguments().length() > 0)
     {
         fputs(qPrintable(tr("Unknown arguments provided: ") % (QStringList() << parser.unknownOptionNames() << parser.positionalArguments()).join(", ")), stdout);
-        QCoreApplication::exit(EXIT_CODE_UNKNOWN_ARGUMENTS_PROVIDED);
-        return;
+        return return_status(EXIT_CODE_UNKNOWN_ARGUMENTS_PROVIDED);
     }
 
     //Check for any missing required arguments or double exclusives
@@ -734,8 +752,7 @@ void command_processor::run()
 
     if (failed == true)
     {
-        QCoreApplication::exit(EXIT_CODE_MISSING_REQUIRED_ARGUMENTS);
-        return;
+        return return_status(EXIT_CODE_MISSING_REQUIRED_ARGUMENTS);
     }
 
 //TODO: Check that options supplied for each transport/group are valid
@@ -748,8 +765,7 @@ void command_processor::run()
         if (smp_mtu < minimum_smp_mtu || smp_mtu > maximum_smp_mtu)
         {
             fputs(qPrintable(tr("Argument out of range: ") % "--" % option_mtu.names().first() % newline), stdout);
-            QCoreApplication::exit(EXIT_CODE_NUMERIAL_ARGUMENT_OUT_OF_RANGE);
-            return;
+            return return_status(EXIT_CODE_NUMERIAL_ARGUMENT_OUT_OF_RANGE);
         }
     }
 
@@ -799,8 +815,7 @@ void command_processor::run()
 
     if (exit_code != EXIT_CODE_SUCCESS)
     {
-        QCoreApplication::exit(exit_code);
-        return;
+        return return_status(exit_code);
     }
 
     //Open transport, exit if it failed
@@ -812,8 +827,7 @@ void command_processor::run()
     if (exit_code != SMP_TRANSPORT_ERROR_OK)
     {
         fputs(qPrintable(tr("Transport open failed: ") % QString::number(exit_code) % newline), stdout);
-        QCoreApplication::exit(EXIT_CODE_TRANSPORT_OPEN_FAILED);
-        return;
+        return return_status(EXIT_CODE_TRANSPORT_OPEN_FAILED);
     }
 
     if (active_transport->is_connected() == false)
@@ -895,7 +909,7 @@ void command_processor::run()
 
     if (exit_code != EXIT_CODE_SUCCESS)
     {
-        QCoreApplication::exit(exit_code);
+        return return_status(exit_code);
     }
 }
 
@@ -2343,6 +2357,45 @@ void command_processor::size_abbreviation(uint32_t size, QString *output)
     }
 
     output->append(QString::number(converted_size, 'g', 3).append(list_abbreviations.at(abbreviation_index)));
+}
+
+void command_processor::interactive_thread_started()
+{
+    qDebug() << "Interactive mode ready!";
+
+    text_thread_wait_condition.wakeAll();
+}
+
+void command_processor::interactive_thread_data(QString data)
+{
+    run(QStringList() << "" << data.split(" ", Qt::SkipEmptyParts));
+}
+
+void command_processor::interactive_mode()
+{
+    if (is_interactive_mode == false)
+    {
+        QEventLoop wait_loop;
+
+        is_interactive_mode = true;
+
+        connect(&text_thread_object, SIGNAL(data(QString)), this, SLOT(interactive_thread_data(QString)), Qt::QueuedConnection);
+        connect(&text_thread_object, SIGNAL(started()), this, SLOT(interactive_thread_started()));
+
+        text_thread_object.start();
+        wait_loop.exec();
+    }
+}
+
+void command_processor::return_status(int status)
+{
+    if (is_interactive_mode == false)
+    {
+        return QCoreApplication::exit(status);
+    }
+
+    qDebug() << "Status: " << status;
+    text_thread_wait_condition.wakeAll();
 }
 
 /******************************************************************************/
