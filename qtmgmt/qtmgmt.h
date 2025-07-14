@@ -31,7 +31,7 @@
 /******************************************************************************/
 // Constants
 /******************************************************************************/
-static const QString qtmgmt_version = "0.06"; //Version string
+static const QString qtmgmt_version = "0.07"; //Version string
 
 #endif // QTMGMT_H
 
