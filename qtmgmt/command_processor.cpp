@@ -69,6 +69,7 @@ const QCommandLineOption option_command_os_force("force", "Force resetting devic
 const QCommandLineOption option_command_os_format("format", "Info format string", "format");
 const QCommandLineOption option_command_os_datetime("datetime", "Date and time", "TODO");
 const QCommandLineOption option_command_os_query("query", "Query string", "query");
+const QCommandLineOption option_command_os_boot_mode("boot-mode", "Boot mode", "mode");
 
 //Image management group
 const QCommandLineOption option_command_img_hash("hash", "Hash of image", "hash");
@@ -97,6 +98,8 @@ const QString newline = "\r\n";
 #else
 const QString newline = "\n";
 #endif
+
+static const uint16_t timeout_erase_ms = 14000;
 
 /******************************************************************************/
 // Local Functions or Private Members
@@ -1425,7 +1428,7 @@ int command_processor::run_group_img_command_upload(QCommandLineParser *parser)
     upload_reset = parser->isSet(option_command_img_reset);
     set_group_transport_settings(active_group);
 
-    if (group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &upload_hash) == true)
+    if (group_img->start_firmware_update((parser->isSet(option_command_img_image) ? parser->value(option_command_img_image).toUInt() : 0), parser->value(option_command_img_file), (parser->isSet(option_command_img_upgrade) ? true : false), &upload_hash, timeout_erase_ms) == true)
     {
         return EXIT_CODE_SUCCESS;
     }
@@ -1442,7 +1445,7 @@ void command_processor::add_group_img_command_erase_slot(QList<entry_t> *entries
 int command_processor::run_group_img_command_erase_slot(QCommandLineParser *parser)
 {
     mode = ACTION_IMG_IMAGE_ERASE;
-    set_group_transport_settings(active_group);
+    set_group_transport_settings(active_group, timeout_erase_ms);
 
     if (group_img->start_image_erase(parser->value(option_command_img_slot).toUInt()) == true)
     {
@@ -1519,17 +1522,21 @@ int command_processor::run_group_os_command_memory_pool(QCommandLineParser *pars
 
 void command_processor::add_group_os_command_reset(QList<entry_t> *entries)
 {
-    //force
+    //force, boot mode
     entries->append({{&option_command_os_force}, false, false});
+    entries->append({{&option_command_os_boot_mode}, false, false});
 }
 
 int command_processor::run_group_os_command_reset(QCommandLineParser *parser)
 {
-    //force
+    //force, boot mode
+    uint8_t boot_mode;
+
     mode = ACTION_OS_RESET;
+    boot_mode = (parser->isSet(option_command_os_boot_mode) == true ? parser->value(option_command_os_boot_mode).toUInt() : 0);
     set_group_transport_settings(active_group);
 
-    if (group_os->start_reset(parser->isSet(option_command_os_force)) == true)
+    if (group_os->start_reset(parser->isSet(option_command_os_force), boot_mode) == true)
     {
         return EXIT_CODE_SUCCESS;
     }
@@ -1761,7 +1768,7 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                     processor->set_transport(active_transport);
                     set_group_transport_settings(group_os);
 
-                    bool started = group_os->start_reset(false);
+                    bool started = group_os->start_reset(false, 0);
                     //todo: check status
 
                     log_debug() << "do reset";
@@ -1903,7 +1910,7 @@ void command_processor::status(uint8_t user_data, group_status status, QString e
                     processor->set_transport(active_transport);
                     set_group_transport_settings(group_os);
 
-                    bool started = group_os->start_reset(false);
+                    bool started = group_os->start_reset(false, 0);
                     //todo: check status
 
                     log_debug() << "do reset";
