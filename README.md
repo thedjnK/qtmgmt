@@ -2,7 +2,7 @@
 
 ## Preface
 
-Note that qtmgmt is currently in the process of being developed for an initial release, the code is not considered stable, and must be built from source.
+Note that qtmgmt is currently in the process of being developed for an initial release, the code is not considered stable and only pre-release test versions are available for download.
 
 ## About
 
